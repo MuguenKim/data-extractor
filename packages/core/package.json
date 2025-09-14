@@ -1,0 +1,19 @@
+{
+  "name": "@core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "tesseract.js": "^5.1.0",
+    "fast-xml-parser": "^4.4.0",
+    "mammoth": "^1.6.0",
+    "msgreader": "^1.0.1",
+    "pdfjs-dist": "^4.6.82",
+    "unzipper": "^0.10.14",
+    "xlsx": "^0.18.5"
+  }
+}

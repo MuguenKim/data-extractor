@@ -1,0 +1,15 @@
+{
+  "id": "invoice.v1",
+  "title": "Invoice v1",
+  "fields": [
+    { "name": "invoice_number", "type": "string", "critical": true, "label_hints": ["Invoice No", "Invoice Number"] },
+    { "name": "issue_date", "type": "date", "critical": true, "label_hints": ["Issue Date", "Date"] },
+    { "name": "due_date", "type": "date", "critical": false, "label_hints": ["Due Date"] },
+    { "name": "currency", "type": "string", "critical": true, "label_hints": ["Currency"] },
+    { "name": "subtotal", "type": "number", "critical": true, "label_hints": ["Subtotal"] },
+    { "name": "tax_total", "type": "number", "critical": true, "label_hints": ["VAT", "Tax Total", "Tax"] },
+    { "name": "grand_total", "type": "number", "critical": true, "label_hints": ["Total", "Amount Due"] },
+    { "name": "vat_id", "type": "string", "critical": false, "label_hints": ["VAT", "Tax ID"] }
+  ]
+}
+

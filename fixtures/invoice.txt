@@ -1,0 +1,15 @@
+ACME Corp
+Invoice No: INV-2024-0913
+Date: 2024-09-13
+
+Item        Qty   Unit   Amount
+Widget A     2    10.00   20.00
+Widget B     1    15.50   15.50
+
+Subtotal:            35.50
+Tax (10%):            3.55
+Grand Total:        USD 39.05
+
+Customer: john.doe@example.com, +1 (555) 111-2233
+IBAN: TN59 1000 6035 1835 9847 8871
+
