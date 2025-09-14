@@ -46,9 +46,9 @@ Turn **uploaded files → extracted text → proposed/confirmed schema → valid
 
 * `/projects` — list/create
 * `/projects/[id]` — project overview (counts, last runs)
-* `/projects/[id]/ingest` — **upload** & ingest status per file (progress)
+* `/projects/[id]/ingest` — **upload** & ingest status per file (load files and transform into raw text format and save results)
 * `/projects/[id]/format` — **Select Schema** OR **Infer Format** → **Schema Editor** → **Save schema**
-* `/projects/[id]/extract` — **Run Extraction** → job status → per-file result table
+* `/projects/[id]/extract` — **Run Extraction** → job status → per-file result table (extract structured data from text)
 * `/projects/[id]/results/[fileId]` — document viewer: values, confidence, spans, rules
 * `/settings` — backend (groq/ollama), OCR policy, language hint
 
