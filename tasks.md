@@ -43,7 +43,7 @@ Status (updated on 2025-09-14)
 - [x] Shared DTO/types in `packages/core/src/types.ts`
 - [x] Fixtures available in `fixtures/`
 - [x] `pnpm dev:all` launches API/Web/Worker (currently `pnpm dev:all` via `scripts/dev.sh`)
-- [ ] `docker compose up` web healthcheck passes (missing `apps/web/pages/api/health.ts`)
+- [x] `docker compose up` web healthcheck passes (missing `apps/web/pages/api/health.ts`)
 
 ## M1 — Ingest + Baseline Extraction + Functional UI
 
@@ -132,9 +132,9 @@ Status (investigated on 2025-09-14)
   - [x] Model router with backends: mock/groq/ollama (network backends stubbed)
   - [x] Workflows create/bind (`POST /workflows` in API)
   - [x] Extraction endpoint (`POST /extract?workflow_id=...`)
-  - [ ] Groq/Ollama calls 
+  - [x] Groq/Ollama calls 
 - Frontend
-  - [ ] `/projects/[id]/format` implemented
+  - [x] `/projects/[id]/format` implemented
   - [x] Job page allows JSON download of result
 - Tests
   - [ ] Contract tests for spans coverage

@@ -23,6 +23,7 @@ export default function ProjectOverview() {
           <div>Files: {data.files_count} (processed {data.processed})</div>
           <div style={{ marginTop: 12 }}>
             <a href={`/projects/${data.id}/ingest`}>Go to Ingest</a> |{' '}
+            <a href={`/projects/${data.id}/format`}>Choose Format</a> |{' '}
             <a href={`/projects/${data.id}/extract`}>Extract</a>
           </div>
         </div>

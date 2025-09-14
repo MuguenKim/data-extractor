@@ -34,6 +34,7 @@ const API_PORT = Number(process.env.API_PORT ?? 3001);
 
 // In-memory stores for dev (no Redis/DB)
 const workflows = new Map<string, WorkflowConfig>();
+const projectWorkflows = new Map<string, Set<string>>();
 type JobRecord = { id: string; status: "queued" | "processing" | "done" | "failed"; result?: any; error?: string };
 const jobs = new Map<string, JobRecord>();
 
@@ -81,6 +82,7 @@ app.post("/projects", (req: any, res: any) => {
   const rec: ProjectRec = { id, name, created_at: new Date().toISOString() };
   projects.set(id, rec);
   projectFiles.set(id, new Set());
+  projectWorkflows.set(id, new Set());
   logger.info('project.create', { project_id: id, name });
   res.json({ id });
 });
@@ -244,14 +246,22 @@ app.post("/projects/:id/extract", async (req: any, res: any) => {
   logger.info('extract.job.start', { job_id: jobId, project_id: p.id, files: ready.length });
 
   try {
-    const schema = (invoiceSchemaV1 as any) as WorkflowSchema;
+    const wfId = String(req.query.workflow_id || "");
+    let useSchema: WorkflowSchema = (invoiceSchemaV1 as any) as WorkflowSchema;
+    let backend: any = "mock";
+    if (wfId) {
+      const wf = workflows.get(wfId);
+      if (!wf) throw new Error("workflow_not_found");
+      useSchema = wf.schema;
+      backend = wf.backend ?? (process.env.DEFAULT_BACKEND as any) ?? "groq";
+    }
     for (const f of ready) {
       const pages = textArtifacts.get(f.id) ?? [];
       const fullText = pages.map((pg) => pg.text).join("\n\n");
       logger.debug('extract.file.start', { job_id: jobId, project_id: p.id, file_id: f.id, pages: pages.length, chars: fullText.length });
-      const result = await extract_with_langextract({ schema, text: fullText, backend: "mock" });
+      const result = await extract_with_langextract({ schema: useSchema, text: fullText, backend });
       const envelope: any = {
-        schema_id: schema.id || "invoice.v1",
+        schema_id: useSchema.id || "invoice.v1",
         file_id: f.id,
         ...result,
       };
@@ -276,8 +286,7 @@ app.get("/projects/:id/results", (req: any, res: any) => {
   if (!p) return res.status(404).json({ error: "project_not_found" });
   const ids = Array.from(projectFiles.get(p.id) ?? []);
   const out = ids.map((fid) => {
-    const arts = textArtifacts.get(fid) ?? [];
-    const has = arts.length > 0;
+    const has = extractionResults.has(fid);
     return { file_id: fid, status: has ? "ok" : (files.get(fid)?.status ?? "uploaded") };
   });
   res.json(out);
@@ -289,10 +298,9 @@ app.get("/projects/:id/results/:fileId", (req: any, res: any) => {
   if (!p) return res.status(404).json({ error: "project_not_found" });
   const f = files.get(req.params.fileId);
   if (!f || f.project_id !== p.id) return res.status(404).json({ error: "file_not_found" });
-  const arts = textArtifacts.get(f.id) ?? [];
-  if (arts.length === 0) return res.status(404).json({ error: "no_text" });
-  const totalChars = arts.reduce((a, b) => a + (b.text?.length || 0), 0);
-  res.json({ file_id: f.id, pages: arts.length, total_chars: totalChars, status: "ok" });
+  const env = extractionResults.get(f.id);
+  if (!env) return res.status(404).json({ error: "no_result" });
+  res.json(env);
 });
 
 // GET /projects/:id/files/:fileId (metadata)
@@ -323,6 +331,36 @@ app.post("/workflows", (req: any, res: any) => {
     };
     workflows.set(wfId, wf);
     logger.info('workflow.create', { workflow_id: wfId, backend: wf.backend, schema_id: schema.id, ocr_policy: wf.ocr_policy, lang_hint: wf.lang_hint });
+    return res.json(wf);
+  } catch (e: any) {
+    logger.error('workflow.error', { error: e.message });
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+// Project-scoped workflow creation to match stable contracts
+// POST /projects/:id/workflows {schema_id|schema_json, backend, ocr_policy, lang_hint}
+app.post("/projects/:id/workflows", (req: any, res: any) => {
+  const p = projects.get(req.params.id);
+  if (!p) return res.status(404).json({ error: "project_not_found" });
+  try {
+    const { schema_id, schema_json, backend, ocr_policy, lang_hint, id } = req.body || {};
+    let schema: WorkflowSchema | null = null;
+    if (schema_id) schema = loadSchemaById(schema_id);
+    if (!schema && schema_json) schema = schema_json as WorkflowSchema;
+    if (!schema) return res.status(400).json({ error: "schema_id or schema_json required" });
+
+    const wfId: string = id ?? uuidv4();
+    const wf: WorkflowConfig = {
+      id: wfId,
+      schema,
+      backend: (backend ?? (process.env.DEFAULT_BACKEND as any) ?? "groq"),
+      ocr_policy: ocr_policy ?? "none",
+      lang_hint,
+    };
+    workflows.set(wfId, wf);
+    (projectWorkflows.get(p.id) as Set<string>).add(wfId);
+    logger.info('workflow.create.project', { project_id: p.id, workflow_id: wfId, backend: wf.backend, schema_id: schema.id, ocr_policy: wf.ocr_policy, lang_hint: wf.lang_hint });
     return res.json(wf);
   } catch (e: any) {
     logger.error('workflow.error', { error: e.message });
