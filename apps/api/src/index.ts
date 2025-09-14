@@ -39,7 +39,7 @@ type JobRecord = { id: string; status: "queued" | "processing" | "done" | "faile
 const jobs = new Map<string, JobRecord>();
 
 // M1 in-memory dev stores (project/file/artifacts/results)
-interface ProjectRec { id: string; name: string; created_by?: string; created_at: string }
+interface ProjectRec { id: string; name: string; created_by?: string; created_at: string; active_workflow_id?: string | null }
 interface FileRec {
   id: string;
   project_id: string;
@@ -79,7 +79,7 @@ app.get("/projects", (_req: any, res: any) => {
 app.post("/projects", (req: any, res: any) => {
   const id = uuidv4();
   const name = (req.body?.name as string) || `Project ${id.slice(0, 8)}`;
-  const rec: ProjectRec = { id, name, created_at: new Date().toISOString() };
+  const rec: ProjectRec = { id, name, created_at: new Date().toISOString(), active_workflow_id: null };
   projects.set(id, rec);
   projectFiles.set(id, new Set());
   projectWorkflows.set(id, new Set());
@@ -94,7 +94,7 @@ app.get("/projects/:id", (req: any, res: any) => {
   const fileIds = Array.from(projectFiles.get(p.id) ?? []);
   const fileRecs = fileIds.map((fid) => files.get(fid)!).filter(Boolean);
   const processed = fileRecs.filter((f) => f.status === "processed").length;
-  res.json({ id: p.id, name: p.name, files_count: fileRecs.length, processed, created_at: p.created_at });
+  res.json({ id: p.id, name: p.name, files_count: fileRecs.length, processed, created_at: p.created_at, active_workflow_id: p.active_workflow_id ?? null });
 });
 
 // POST /projects/:id/files (dev-min JSON upload)
@@ -231,30 +231,38 @@ app.get("/projects/:id/files/:fileId/text", (req: any, res: any) => {
   res.type("text/plain").send(pages.map((pg) => pg.text).join("\n\n"));
 });
 
-// --- M1: Baseline Extract over all project files ---
-// POST /projects/:id/extract (baseline)
+// --- M2: Schema-controlled Extract over all project files ---
+// POST /projects/:id/extract?workflow_id=... (defaults to Active Workflow when omitted)
 app.post("/projects/:id/extract", async (req: any, res: any) => {
   const p = projects.get(req.params.id);
   if (!p) return res.status(404).json({ error: "project_not_found" });
   const ids = Array.from(projectFiles.get(p.id) ?? []);
   const ready = ids.map((fid) => files.get(fid)!).filter((f) => f && f.status === "processed");
 
-  const jobId = uuidv4();
-  const job: JobRecord = { id: jobId, status: "processing" };
-  jobs.set(jobId, job);
-  res.json({ job_id: jobId, total: ready.length });
-  logger.info('extract.job.start', { job_id: jobId, project_id: p.id, files: ready.length });
-
   try {
-    const wfId = String(req.query.workflow_id || "");
-    let useSchema: WorkflowSchema = (invoiceSchemaV1 as any) as WorkflowSchema;
-    let backend: any = "mock";
-    if (wfId) {
-      const wf = workflows.get(wfId);
-      if (!wf) throw new Error("workflow_not_found");
-      useSchema = wf.schema;
-      backend = wf.backend ?? (process.env.DEFAULT_BACKEND as any) ?? "groq";
+    const wfIdQuery = String(req.query.workflow_id || "");
+    let wfToUse: WorkflowConfig | null = null;
+    if (wfIdQuery) {
+      const wf = workflows.get(wfIdQuery);
+      if (!wf) return res.status(404).json({ error: "workflow_not_found" });
+      wfToUse = wf;
+    } else if (p.active_workflow_id) {
+      const wf = workflows.get(p.active_workflow_id);
+      if (!wf) return res.status(404).json({ error: "active_workflow_not_found" });
+      wfToUse = wf;
+    } else {
+      return res.status(400).json({ error: "workflow_required", message: "No workflow_id provided and no Active Workflow set for project" });
     }
+
+    const useSchema: WorkflowSchema = wfToUse.schema;
+    const backend = wfToUse.backend ?? (process.env.DEFAULT_BACKEND as any) ?? "groq";
+
+    const jobId = uuidv4();
+    const job: JobRecord = { id: jobId, status: "processing" };
+    jobs.set(jobId, job);
+    res.json({ job_id: jobId, total: ready.length });
+    logger.info('extract.job.start', { job_id: jobId, project_id: p.id, files: ready.length, workflow_id: wfToUse.id, backend, schema_id: (useSchema as any)?.id });
+
     for (const f of ready) {
       const pages = textArtifacts.get(f.id) ?? [];
       const fullText = pages.map((pg) => pg.text).join("\n\n");
@@ -273,10 +281,9 @@ app.post("/projects/:id/extract", async (req: any, res: any) => {
     jobs.set(jobId, job);
     logger.info('extract.job.done', { job_id: jobId, project_id: p.id });
   } catch (e: any) {
-    job.status = "failed";
-    job.error = e?.message ?? String(e);
-    jobs.set(jobId, job);
-    logger.error('extract.job.error', { job_id: jobId, project_id: p.id, error: job.error });
+    const errMsg = e?.message ?? String(e);
+    logger.error('extract.job.error', { project_id: p.id, error: errMsg });
+    return res.status(500).json({ error: errMsg });
   }
 });
 
@@ -366,6 +373,46 @@ app.post("/projects/:id/workflows", (req: any, res: any) => {
     logger.error('workflow.error', { error: e.message });
     return res.status(500).json({ error: e.message });
   }
+});
+
+// GET /projects/:id/workflows -> list workflows for a project
+app.get("/projects/:id/workflows", (req: any, res: any) => {
+  const p = projects.get(req.params.id);
+  if (!p) return res.status(404).json({ error: "project_not_found" });
+  const ids = Array.from(projectWorkflows.get(p.id) ?? []);
+  const list = ids
+    .map((wid) => workflows.get(wid))
+    .filter(Boolean)
+    .map((wf) => ({ id: (wf as WorkflowConfig).id, backend: (wf as WorkflowConfig).backend, schema: (wf as WorkflowConfig).schema }));
+  res.json({ active_workflow_id: p.active_workflow_id ?? null, workflows: list });
+});
+
+// PATCH /projects/:id/workflows/:workflowId/activate -> set as Active Workflow
+app.patch("/projects/:id/workflows/:workflowId/activate", (req: any, res: any) => {
+  const p = projects.get(req.params.id);
+  if (!p) return res.status(404).json({ error: "project_not_found" });
+  const workflowId = String(req.params.workflowId);
+  const wf = workflows.get(workflowId);
+  if (!wf) return res.status(404).json({ error: "workflow_not_found" });
+  const set = projectWorkflows.get(p.id) ?? new Set<string>();
+  set.add(workflowId);
+  projectWorkflows.set(p.id, set);
+  p.active_workflow_id = workflowId;
+  projects.set(p.id, p);
+  logger.info('workflow.activate', { project_id: p.id, workflow_id: workflowId });
+  res.json({ ok: true, active_workflow_id: workflowId });
+});
+
+// GET /workflows -> list all workflows across projects
+app.get("/workflows", (_req: any, res: any) => {
+  const list = Array.from(workflows.values()).map((wf) => {
+    const project_ids: string[] = [];
+    for (const [pid, set] of projectWorkflows.entries()) {
+      if (set.has(wf.id)) project_ids.push(pid);
+    }
+    return { id: wf.id, backend: wf.backend, schema: wf.schema, project_ids };
+  });
+  res.json(list);
 });
 
 // POST /extract?workflow_id=... { text }

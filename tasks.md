@@ -6,7 +6,7 @@
 
 - Milestones:
   - [ ] M0. Repo & Infra (Day 1–2)
-- [x] M1. Ingest + Baseline Extraction + Functional UI (Week 1)
+- [ ] M1. Ingest + Baseline Extraction + Functional UI (Week 1)
   - [ ] M2. LangExtract + Groq/Ollama Core (Week 2)
   - [ ] M3. Validation + Review UI (Week 3)
   - [ ] M4. Schema Inference + Editor (Week 4)
@@ -57,25 +57,12 @@ Status (updated on 2025-09-14)
 
 * `/projects` (create); `/projects/[id]` (summary)
 * `/projects/[id]/ingest` (multi-upload, progress, file table)
-* `/projects/[id]/extract` (Run Baseline Extraction for **all files**; status)
+* `/projects/[id]/extract` (Run Baseline Extraction for **all files**; status; uses Active Workflow when set)
 * `/projects/[id]/results/[fileId]` (document viewer with **highlighted spans**)
 
 **Tests**
 
 Golden Tests (M1) — implement in CI with fixture-driven assertions. Use ResultEnvelope-like JSON for expected fields where applicable; store expected under `fixtures/golden/baseline/`.
-
-- M1-GT-01 Ingest TXT: upload `fixtures/invoice.txt` → `TextArtifact` created with page_no=1, non-empty `text`, monotonically increasing `char_offsets`.
-- M1-GT-02 Ingest HTML: upload `fixtures/invoice.html` → Readability adapter returns cleaned `text` (≥1k chars not required; just non-trivial), preserves order; `TextArtifact` persisted.
-- M1-GT-03 Ingest CSV: upload `fixtures/invoice.csv` → rows serialized to `text` with delimiter awareness; `TextArtifact` exists; at least 3 logical rows detected in downstream table extractor.
-- M1-GT-04 Ingest Image (OCR): upload `fixtures/invoice1.png`, `fixtures/invoice2.png` → status `processed`; `TextArtifact` pages created. Dev-min may be flaky; project ingest success ≥95% across all fixtures.
-- M1-GT-05 Ingest PDF (OCR): upload `fixtures/invoice3.pdf`, `fixtures/invoice4.pdf` → status `processed`; `TextArtifact` pages ≥1 each; bbox_map optional.
-- M1-GT-06 Baseline fields (core): run baseline extract for project → each file yields non-empty fields with spans: `invoice_number`, `invoice_date`, `vendor`/`seller`, `grand_total`. Each field: `value` not null, `confidence` in [0,1], `spans` non-empty with valid `{page,start,end}` within doc length.
-- M1-GT-07 Table lines: lines parsed from at least one of HTML/CSV/PDF/Image; each line item has `desc`, `qty` (number), `unit_price` (number). At least one line has spans on numeric fields; warnings produced for any missing spans per policy.
-- M1-GT-08 Project-wide extract: `POST /projects/:id/extract` runs over all `processed` files; one `ExtractionResult` per file persisted; no file skipped.
-- M1-GT-09 API contracts: `POST /projects`, `POST /projects/:id/files`, `GET /projects/:id/files`, `POST /projects/:id/extract`, `GET /projects/:id/results` adhere to response shapes; file.status transitions `uploaded` → `processed`.
-- M1-GT-10 UI smoke: routes `/projects`, `/projects/[id]`, `/projects/[id]/ingest`, `/projects/[id]/extract`, `/projects/[id]/results/[fileId]` render 200; results viewer highlights spans.
-- M1-GT-11 PII policy: returned values are unmasked and match source text within span windows.
-- M1-GT-12 Confidence sanity: `invoice_number` and `grand_total` confidences ≥0.5 on at least one non-image/non-PDF fixture; confidences within [0,1] for all fields.
 
 Golden files to add (authoritative expected outputs for baseline extractor):
 - `fixtures/golden/baseline/invoice.txt.json`
@@ -100,12 +87,12 @@ Status (investigated on 2025-09-14)
   - [x] Baseline extractor with spans/confidence (`packages/core/src/extractors/baseline.ts`)
   - [x] API endpoints for projects/files/ingest job/baseline extract (in-memory dev)
 - Frontend
-  - [x] Required routes `/projects`, `/projects/[id]`, `/ingest`, `/results/[fileId]`
-  - [x] Results viewer with highlighted spans
+  - [ ] Required routes `/projects`, `/projects/[id]`, `/ingest`, `/results/[fileId]`
+  - [ ] Results viewer with highlighted spans
 - Tests
-  - [x] Golden tests and ingest success metrics implemented (see `tests/*` and `fixtures/golden/baseline/*`)
+  - [ ] Golden tests and ingest success metrics implemented (see `tests/*` and `fixtures/golden/baseline/*`)
 - DoD
-  - [x] End-to-end upload → spans in results for all project files (dev-min JSON ingest)
+  - [ ] End-to-end upload → spans in results for all project files (dev-min JSON ingest)
 
 ## M2 — LangExtract + Groq/Ollama Core
 
@@ -130,11 +117,11 @@ Status (investigated on 2025-09-14)
 - Backend
   - [x] LangExtract wrapper + chunker + merge (`packages/core/src/langextract/*`)
   - [x] Model router with backends: mock/groq/ollama (network backends stubbed)
-  - [x] Workflows create/bind (`POST /workflows` in API)
-  - [x] Extraction endpoint (`POST /extract?workflow_id=...`)
+  - [x] Workflows create/bind (`POST /projects/:id/workflows`); list/activate (`GET /projects/:id/workflows`, `PATCH /projects/:id/workflows/:workflowId/activate`); global list (`GET /workflows`)
+  - [x] Extraction endpoint (`POST /projects/:id/extract?workflow_id=...`) defaults to Active Workflow when param omitted
   - [x] Groq/Ollama calls 
 - Frontend
-  - [x] `/projects/[id]/format` implemented
+  - [ ] `/projects/[id]/format` implemented; `/projects/[id]` shows Selected Format when set; `/workflows` lists workflows across projects
   - [x] Job page allows JSON download of result
 - Tests
   - [ ] Contract tests for spans coverage
@@ -221,7 +208,7 @@ Status (investigated on 2025-09-14)
 9. **Web—Results Viewer:** highlight spans; field panel with confidence & warnings
 10. **LangExtract Wrapper:** chunker (1–3k tokens), merge, spans required
 11. **Model Router:** Ollama fast pass → Groq precision escalation thresholds
-12. **Workflows CRUD:** bind schema/backend per project; `/extract?workflow_id=...`
+12. **Workflows CRUD + Monitor:** create/list/activate per project; global `/workflows` monitor; `/projects/:id/extract` uses Active Workflow by default
 13. **Validation Engine:** JSON-Schema + Rule DSL + re-read check
 14. **Web—Review UI:** show rules, inline edit, re-validate, status badges
 15. **Infer Schema API:** sample 2–5 files → draft JSON Schema + versioning
@@ -243,6 +230,8 @@ Status (investigated on 2025-09-14)
 * **AT-04** Rule fails → job `needs_review`; after inline edit → re-validate → `ok`
 * **AT-05** Infer schema from 3 files → accept → extract across all files → results persisted
 * **AT-06** SDK script can: create project → upload → infer schema → extract → fetch results → pass
+* **AT-07** Project Overview shows Selected Format/Active Workflow when set; shows CTA when not set
+* **AT-08** `POST /projects/:id/extract` without `workflow_id` uses Active Workflow if present; otherwise API returns error and UI prompts to select/create workflow
 
 ---
 

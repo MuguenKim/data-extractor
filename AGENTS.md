@@ -11,11 +11,12 @@ Turn **uploaded files → extracted text → proposed/confirmed schema → valid
 1. **Create Project**
 2. **Ingest Data** (upload 1..N files; extract text/layout; persist both)
 3. **Choose Format**: user selects a schema **or** clicks **Infer Format** (system proposes one; user edits/accepts)
-4. **Extract & Validate** (run over **all project files**; show results, spans, rule checks)
+   - 3a. **Bind/Select Workflow**: create or select a project-scoped Workflow that references the chosen schema and backend options; mark it as the project's **Active Workflow**.
+4. **Extract & Validate** (run over **all project files** using the project's Active Workflow; show results, spans, rule checks)
 
 ## Data/Domain Model
 
-* **Project** `{id, name, created_by, created_at}`
+* **Project** `{id, name, created_by, created_at, active_workflow_id|null}`
 * **File** `{id, project_id, name, mime, pages, storage_uri, status: uploaded|processed|failed}`
 * **TextArtifact** `{file_id, page_no, text, char_offsets, bbox_map}`
 * **Schema** `{id, project_id|null, name, version, json_schema, kind: user|inferred}`
@@ -45,23 +46,27 @@ Turn **uploaded files → extracted text → proposed/confirmed schema → valid
 ## UI — Pages (do not delete/rename)
 
 * `/projects` — list/create
-* `/projects/[id]` — project overview (counts, last runs)
+* `/projects/[id]` — project overview (counts, last runs, **Selected Format/Workflow** if set; quick links)
 * `/projects/[id]/ingest` — **upload** & ingest status per file (load files and transform into raw text format and save results)
 * `/projects/[id]/format` — **Select Schema** OR **Infer Format** → **Schema Editor** → **Save schema**
-* `/projects/[id]/extract` — **Run Extraction** → job status → per-file result table (extract structured data from text)
+* `/projects/[id]/extract` — **Structured Extraction Workflow** tied to the project's Active Workflow; **Run Extraction** → job status → per-file result table
 * `/projects/[id]/results/[fileId]` — document viewer: values, confidence, spans, rules
 * `/settings` — backend (groq/ollama), OCR policy, language hint
+* `/workflows` — global workflows monitor/manager (list all workflows across all projects; activate/deactivate, view last runs)
 
 ## Backends/Endpoints (stable contracts)
 
 * `POST /projects` → {id}
-* `GET /projects/:id` → summary
+* `GET /projects/:id` → summary (counts, last runs, `active_workflow_id`, selected schema/backend summary if set)
 * `POST /projects/:id/files` (multipart) → creates **Ingest Job**
 * `GET /projects/:id/files` → list with statuses
 * `POST /projects/:id/schemas` → save user schema
 * `POST /projects/:id/infer_schema` → creates **Infer Job**; returns **draft schema** (on completion)
 * `POST /projects/:id/workflows` → bind schema + options (backend, OCR policy, lang)
-* `POST /projects/:id/extract?workflow_id=...` → creates **Extract Job** for **all files**
+* `GET /projects/:id/workflows` → list workflows for project
+* `PATCH /projects/:id/workflows/:workflowId/activate` → set as project's **Active Workflow**
+* `GET /workflows` → list all workflows across projects (monitor/management)
+* `POST /projects/:id/extract?workflow_id=...` → creates **Extract Job** for **all files**; if `workflow_id` omitted and `active_workflow_id` exists, use the Active Workflow
 * `GET /jobs/:id` → status + metrics
 * `GET /projects/:id/results` → per-file extraction summaries
 * `GET /projects/:id/results/:fileId` → full ResultEnvelope (fields, spans, validation)
@@ -117,6 +122,8 @@ Turn **uploaded files → extracted text → proposed/confirmed schema → valid
 * Implement baseline and LangExtract extractors **fully**; no TODO-only modules.
 * Always return **spans**; if none, set value `null` + warning.
 * Project-level **Extract** must iterate **all files** in the project.
+* Project Overview must surface the **Selected Format/Active Workflow** when present, with link to `/projects/[id]/format` to change.
+* The Extract page `/projects/[id]/extract` must operate on the project's **Active Workflow** or prompt the user to select/create one.
 
 ---
 
