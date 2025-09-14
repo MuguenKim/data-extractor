@@ -1,6 +1,7 @@
 export * from "./types";
 export * from "./langextract/index";
 export * from "./validation/dsl";
+export * from "./ingest/index";
 
 // Back-compat type aliases for existing internal extractors
 export type ExtractionResult = import('./types').ResultEnvelope;

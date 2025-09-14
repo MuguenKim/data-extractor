@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Enable strict mode, but make pipefail optional for shells/environments that don't support it
+set -e
+set -u
+# Try enabling pipefail if available (ignore errors in non-bash shells)
+( set -o pipefail ) 2>/dev/null || true
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"/.. && pwd)"
 PIDS_DIR="$ROOT_DIR/.dev"

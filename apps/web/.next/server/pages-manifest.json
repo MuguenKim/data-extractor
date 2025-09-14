@@ -2,6 +2,8 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/": "pages/index.js",
-  "/workflows": "pages/workflows.js"
+  "/projects/[id]/ingest": "pages/projects/[id]/ingest.js",
+  "/projects/[id]/results/[fileId]": "pages/projects/[id]/results/[fileId].js",
+  "/projects/[id]": "pages/projects/[id].js",
+  "/projects/[id]/extract": "pages/projects/[id]/extract.js"
 }

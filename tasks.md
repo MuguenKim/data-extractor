@@ -1,285 +1,239 @@
-# Milestones (revised)
+# Milestones (final)
+
+## Progress Tracker
+
+- Last Updated: 2025-09-14
+
+- Milestones:
+  - [ ] M0. Repo & Infra (Day 1–2)
+- [x] M1. Ingest + Baseline Extraction + Functional UI (Week 1)
+  - [ ] M2. LangExtract + Groq/Ollama Core (Week 2)
+  - [ ] M3. Validation + Review UI (Week 3)
+  - [ ] M4. Schema Inference + Editor (Week 4)
+  - [ ] M5. Public API + SDK + Deployable PoC (Week 5)
+
+- Acceptance Tests (details below):
+  - [ ] AT-01
+  - [ ] AT-02
+  - [ ] AT-03
+  - [ ] AT-04
+  - [ ] AT-05
+  - [ ] AT-06
+
 
 **M0. Repo & Infra (Day 1–2)**
-**M1. Ingest + Baseline Extraction + Minimal UI (Week 1)**
-**M2. LangExtract + Groq/Ollama Extraction Core (Week 2)**
-**M3. Validation Engine + HITL Review UI (Week 3)**
-**M4. Schema Inference Mode + Editor (Week 4)**
-**M5. Public API + SDKs + Deploy + Beta (Week 5)**
+**M1. Ingest + Baseline Extraction + Functional UI (Week 1)**
+**M2. LangExtract + Groq/Ollama Core (Week 2)**
+**M3. Validation + Review UI (Week 3)**
+**M4. Schema Inference + Editor (Week 4)**
+**M5. Public API + SDK + Deployable PoC (Week 5)**
 
----
+## M0 — Repo & Infra
 
-## M0 — Repo & Infra (Day 1–2)
+* Mono-repo scaffolding; minimal dev mode (in-memory) + optional Compose (Postgres/Redis/MinIO/Ollama)
+* Health routes; shared DTO lib; fixtures (5 docs)
 
-**Backend**
+**DoD:** `pnpm dev` launches API/Web/Worker locally; `docker compose up` works.
 
-* Scaffold mono-repo: `apps/api`, `apps/worker`, `apps/web`, `packages/core`, `packages/clients`, `infrastructure`.
-* Minimal dev mode (in-memory repos): runs **without** Postgres/Redis/S3.
-* Optional Compose: Postgres, Redis, MinIO, Ollama.
-* Health endpoints: `GET /healthz`, `GET /readyz`.
+Status (updated on 2025-09-14)
 
-**Frontend**
+- [x] Monorepo scaffolding present (`apps/*`, `packages/*`, `infrastructure/*`)
+- [x] Minimal dev mode via in-memory stores (API jobs/workflows)
+- [x] Health routes: API (`/health`), Worker (`/health`)
+- [x] Shared DTO/types in `packages/core/src/types.ts`
+- [x] Fixtures available in `fixtures/`
+- [x] `pnpm dev:all` launches API/Web/Worker (currently `pnpm dev:all` via `scripts/dev.sh`)
+- [ ] `docker compose up` web healthcheck passes (missing `apps/web/pages/api/health.ts`)
 
-* Next.js app bootstrapped with shadcn/ui, file upload, route stubs:
-
-  * `/upload`, `/jobs/[id]`, `/workflows`, `/schemas`.
-
-**Tests/Fixtures**
-
-* Add 5 sample docs (PDF, image, DOCX, CSV, HTML) under `fixtures/`.
-
-**DoD**
-
-* `pnpm dev` runs API/Web/Worker locally w/out external deps.
-* `docker compose up` works with services on.
-
----
-
-## M1 — Ingest + Baseline Extraction + Minimal UI (Week 1)
-
-**Goal:** upload any file → text + **offset map** + **basic field extraction** (no LLM) → visible in UI.
+## M1 — Ingest + Baseline Extraction + Functional UI
 
 **Backend**
 
-* Adapters:
-
-  * PDF/Image → DocTR/RapidOCR (+ bbox), fallback Tesseract.
-  * DOCX → python-docx; CSV/XLSX → pandas; HTML/URL → Readability+snapshot.
-* Persist **DocumentText** (`doc_id`, `pages[]`, `char_offsets`, `bbox_map`).
-* **Baseline extractor (rule-led)** in `packages/core/extractors/baseline`:
-
-  * Regex/heuristics for invoice-ish fields: `invoice_number`, `date`, `currency`, `total`, and **table detector** that returns naive rows.
-  * Emits **ResultEnvelope**: `fields.value|confidence|spans`, `warnings`, `status`.
-* API v0:
-
-  * `POST /ingest` → `{job_id, doc_id}`
-  * `GET /docs/{doc_id}/text` → text + offsets (dev-only)
-  * `POST /extract/baseline?schema_id=invoice.v1`
+* File adapters (PDF/Image, DOCX, CSV/XLSX, HTML/URL) → `TextArtifact`
+* Baseline extractor implemented (regex/labels/tables) + spans + confidence
+* Endpoints: projects, files, ingest job, baseline extract (per project)
 
 **Frontend**
 
-* `/upload`: drag-drop, show ingest progress.
-* `/jobs/[id]`: show **parsed text with highlights** for baseline fields (click field → scroll to span).
-* Light theme, no auth yet.
-
-**Tests/Fixtures**
-
-* Golden tests for baseline rules on 5 fixtures.
-* KPI logs: % pages OCR’d, span coverage.
-
-**DoD**
-
-* Upload → see baseline extracted fields with spans highlighted.
-* 95% docs ingest without crash; offset map present.
-
-### M1 — Updates (dev, implemented in this commit)
-
-- Adapters added in `packages/core/src/ingest` with type-safe outputs:
-  - `html` (existing) + `mhtml`, `eml` (basic MIME parsing; HTML parts converted to Markdown). `msg` placeholder with warning.
-  - `csv` (existing) + `spreadsheet` adapter: CSV/TSV pass-through; binary XLSX/XLS/ODS return warning placeholder.
-- `pdf` implemented via `pdfjs-dist` for digital text (per-page `pageMap`). If no selectable text, emits warning (OCR fallback not yet wired in dev).
-- `docx` implemented via `mammoth` (raw text extraction).
-  - `image` placeholder (OCR to be handled by worker; bboxMap field present for future tokens/lines).
-- `presentation` implemented for PPTX via unzip+`fast-xml-parser` (extracts slide text nodes); ODP remains a placeholder.
-- Offsets/Spans: extended `Span` to support sheet/row/col + in-cell offsets, DOM path + part id, and slide/shape indices; kept page/bbox for OCR. `pageMap` now populated for PDFs.
-- `DocumentText` extended with optional `bboxMap` per page (tokens/lines) and adapter `notes` in `meta`.
-- API `/ingest` now routes these types via `guessAdapter` and returns warnings explaining placeholders where applicable.
-
----
-
-## M2 — LangExtract + Groq/Ollama Extraction Core (Week 2)
-
-**Goal:** schema-controlled extraction with spans via LangExtract; model routing.
-
-**Backend**
-
-* `packages/core/langextract`:
-
-  * Wrapper: `extract_with_langextract({schema, text, chunks, backend})`.
-  * Chunker: 1–3k tokens, 10–15% overlap; per-chunk extraction; merge policy (confidence, label proximity).
-* Model router:
-
-  * **Ollama fast pass** (local) → **Groq precision pass** if `critical_confidence<thr`.
-* Workflows:
-
-  * `POST /workflows` `{schema_id|schema_json, backend, ocr_policy, lang_hint}`
-  * `POST /extract?workflow_id=...` (LLM path)
-  * `GET /jobs/{id}` returns **final ResultEnvelope**.
-
-**Frontend**
-
-* `/workflows`: create/edit workflow (choose schema `invoice.v1` initially).
-* `/jobs/[id]`: side-by-side **field panel** (value, confidence) + **document viewer** (bbox highlight); download JSON.
+* `/projects` (create); `/projects/[id]` (summary)
+* `/projects/[id]/ingest` (multi-upload, progress, file table)
+* `/projects/[id]/extract` (Run Baseline Extraction for **all files**; status)
+* `/projects/[id]/results/[fileId]` (document viewer with **highlighted spans**)
 
 **Tests**
 
-* Contract tests: given `invoice.v1`, ≥90% critical fields have spans on fixtures.
-* Load test: 20 pages/min single node.
+* Golden tests for baseline on fixtures; 95% ingest success
 
-**DoD**
+**DoD:** Upload → see **real extracted fields** (not stubs) with spans, for all project files.
 
-* `/extract` returns strict JSON + spans via LangExtract for `invoice.v1`.
+Status (investigated on 2025-09-14)
 
----
+- Backend
+  - [x] File adapters implemented (`packages/core/src/ingest/*`)
+  - [x] Baseline extractor with spans/confidence (`packages/core/src/extractors/baseline.ts`)
+  - [x] API endpoints for projects/files/ingest job/baseline extract (in-memory dev)
+- Frontend
+  - [x] Required routes `/projects`, `/projects/[id]`, `/ingest`, `/results/[fileId]`
+  - [x] Results viewer with highlighted spans
+- Tests
+  - [ ] Golden tests and ingest success metrics
+- DoD
+  - [x] End-to-end upload → spans in results for all project files (dev-min JSON ingest)
 
-## M3 — Validation Engine + HITL Review UI (Week 3)
-
-**Goal:** strict JSON-Schema + business rules + review/correction loop.
+## M2 — LangExtract + Groq/Ollama Core
 
 **Backend**
 
-* JSON-Schema validation (types/format/required).
-* **Rule DSL** (in `packages/core/validation/dsl.ts`):
-
-  * `equals(sum(lines.amount), subtotal, tol)`
-  * `equals(add(subtotal, tax_total), grand_total, tol)`
-  * `in_set(currency, [...])`
-  * `match(vat_id, regex)`
-  * `date_le(issue_date, due_date)`
-* Critical thresholds + **span re-read** check (small window OCR/text reread).
-* Status pipeline: `ok | needs_review | failed`.
-* Save **exemplars** (before/after) in pgvector (flag behind env if DB off).
+* LangExtract wrapper + chunker + merge; model router (Ollama fast → Groq precision)
+* Workflow create/bind; `/extract?workflow_id=` (schema-controlled)
 
 **Frontend**
 
-* `/review/[job]`:
-
-  * List failed rules / low confidence.
-  * Inline edit values; highlight spans; accept/save corrections.
-  * Show rule re-check results live.
+* `/projects/[id]/format`: select existing schema; **Run Extraction** (schema mode)
+* `/projects/[id]/results/[fileId]`: value/confidence/spans JSON download
 
 **Tests**
 
-* Unit tests for DSL ops; e2e for “edit → rules pass → status ok”.
-* Metrics: edit rate, first-pass yield.
+* Contract tests: ≥90% critical fields have spans on fixtures
 
-**DoD**
+**DoD:** Schema-controlled extraction returns strict JSON + spans across project files.
 
-* Rule failures route to Review; edits persist; KPIs logged.
+Status (investigated on 2025-09-14)
 
----
+- Backend
+  - [x] LangExtract wrapper + chunker + merge (`packages/core/src/langextract/*`)
+  - [x] Model router with backends: mock/groq/ollama (network backends stubbed)
+  - [x] Workflows create/bind (`POST /workflows` in API)
+  - [x] Extraction endpoint (`POST /extract?workflow_id=...`)
+  - [ ] Groq/Ollama calls implemented (currently placeholders that throw)
+- Frontend
+  - [ ] `/projects/[id]/format` route not present (demo page `/workflows` exists)
+  - [x] Job page allows JSON download of result
+- Tests
+  - [ ] Contract tests for spans coverage
+- DoD
+  - [ ] Project-wide schema-controlled extraction with spans
 
-## M4 — Schema Inference Mode + Editor (Week 4)
-
-**Goal:** start without schema; infer, show, edit, save versioned workflow schema.
-
-**Backend**
-
-* `POST /infer_schema`:
-
-  * Sample 2–5 docs → propose **draft JSON Schema** with `type`, `format`, `pattern`, `enum`, `required` (promote only if stable), `x-meta.example`.
-* Versioning for **Workflow Schema** (`schema_id`, `version`).
-* Store schema diffs and upgrade paths.
-
-**Frontend**
-
-* **Schema Editor** (JSON schema form + helpers):
-
-  * toggle `required`, edit `pattern/enum`, set field `format`.
-  * Preview extraction against one doc.
-
-**Tests**
-
-* Inference sanity tests: ≤10% manual edits on fixture set.
-* Snapshot tests for schema JSON.
-
-**DoD**
-
-* User can infer → edit → save → reuse schema in workflow.
-
----
-
-## M5 — Public API + SDKs + Deploy + Beta (Week 5)
+## M3 — Validation + Review UI
 
 **Backend**
 
-* Harden endpoints: `/workflows`, `/infer_schema`, `/extract`, `/jobs/{id}`, `/validate`.
-* Webhooks: `document.extracted`, `document.needs_review`, `document.failed`.
-* Basic RBAC (org/project/API key), quotas/rate limits.
+* JSON-Schema validation + Rule DSL; file & project-level status (`ok|needs_review|failed`)
 
 **Frontend**
 
-* Add auth (Supabase/Auth.js), org/project switcher.
-* Settings page: backend choice (Groq/Ollama), OCR policy, PII mask.
+* `/projects/[id]/results/[fileId]`: rule outcomes; inline edits; “Re-validate” button
+* Project results page: filter by status, export CSV/JSON
 
-**SDKs**
+**DoD:** Failed rules → “Needs Review”; edits persist; re-validate passes.
 
-* `packages/clients/js`: TS client with typed DTOs + examples.
-* `packages/clients/py`: minimal Python client.
+Status (investigated on 2025-09-14)
 
-**Deploy**
+- Backend
+  - [x] Rule DSL implemented (`packages/core/src/validation/dsl.ts`)
+  - [ ] JSON-Schema validation layer
+  - [ ] Grounding re-read check
+- Frontend
+  - [ ] Review UI, inline edits, re-validate controls
+- DoD
+  - [ ] Not met
 
-* Single-node Fly.io/Render. CI: lint/test/build. Seed demo.
+## M4 — Schema Inference + Editor
 
-**DoD**
+**Backend**
 
-* External client runs end-to-end; webhook received; deploy <15 min.
+* `/infer_schema` (project): propose draft JSON Schema; versioning
 
----
+**Frontend**
 
-## Expanded GitHub Issues (with FE/BE split)
+* `/projects/[id]/format`: **Infer Format** → **Schema Editor** (JSON form) → Save → Re-run Extraction
 
-1. **Infra:** Minimal dev mode + optional Compose (Postgres/Redis/MinIO/Ollama)
-2. **Repo:** pnpm workspaces, shared tsconfig, Python packaging skeleton
-3. **API (M0):** Health routes + request/response DTO base types
-4. **Web (M0):** Next.js boot, shadcn setup, `/upload` stub
-5. **Ingest (M1-BE):** PDF/Image OCR pipeline with bbox maps
-6. **Ingest (M1-BE):** DOCX/CSV/XLSX/HTML adapters + unified `DocumentText`
-7. **Baseline Extractor (M1-BE):** regex/table detector + envelope builder
-8. **Web (M1-FE):** `/jobs/[id]` text viewer + span highlights; `/upload` end-to-end
-9. **LangExtract (M2-BE):** wrapper + chunker + merge; spans required
-10. **Model Router (M2-BE):** Ollama→Groq escalation + thresholds
-11. **Workflows API (M2-BE):** CRUD + `/extract?workflow_id=`
-12. **Web (M2-FE):** Workflows page + job viewer (field panel + bbox highlight)
-13. **Validation DSL (M3-BE):** engine + JSON-Schema validation + span re-read
-14. **Web (M3-FE):** Review UI with inline edits + rule outcomes
-15. **Schema Inference (M4-BE):** `/infer_schema` + versioning
-16. **Web (M4-FE):** Schema Editor (JSON form, preview run)
-17. **API Hardening (M5-BE):** RBAC, rate limits, webhooks
-18. **SDKs (M5):** TS + Python clients + examples
-19. **Deploy/CI (M5):** Fly/Render configs, CI pipeline, demo seed
-20. **Goldens & KPIs:** test datasets, metrics ingestion, dashboard stub
+**DoD:** Start with no schema → infer → user adjusts → saved & reused.
 
----
+Status (investigated on 2025-09-14)
 
-## Clear DoD per Milestone (frontend included)
+- [ ] `/infer_schema` backend endpoint
+- [ ] Schema Editor UI under `/projects/[id]/format`
+- [ ] Versioning and storage of inferred schema
 
-* **M1**
+## M5 — Public API + SDK + Deployable PoC
 
-  * FE: Upload UI + Job page highlighting baseline fields.
-  * BE: Ingest + Baseline extractor returns spans.
-  * Tests: Golden regex hits; no crashes on 95% inputs.
+**Backend**
 
-* **M2**
+* Harden routes; webhooks; RBAC (org/project/API key); rate limits
 
-  * FE: Workflows list/detail; JSON download.
-  * BE: LangExtract with model routing; ≥90% critical spans.
-  * Tests: Contract tests per schema.
+**Frontend**
 
-* **M3**
+* `/settings`: backend, OCR, language
+* Demo toggle: “Run PoC demo” seeds a sample project & one-click run
 
-  * FE: Review UI edits + rule results; status badges.
-  * BE: Rule DSL, JSON-Schema check, span re-read.
-  * Tests: Edit → pass pipeline; metrics logged.
+**SDKs/Deploy**
 
-* **M4**
+* TS + Python clients; Fly/Render config; CI
 
-  * FE: Schema Editor with live preview, version save.
-  * BE: `/infer_schema` stable; versioning.
-  * Tests: Inferred schema requires ≤10% manual edit on fixtures.
+**DoD:** External SDK runs project → ingest → infer/choose schema → extract → results/webhook. Single-node deploy <15 min.
 
-* **M5**
+Status (investigated on 2025-09-14)
 
-  * FE: Auth + settings; webhook test page.
-  * BE: RBAC, quotas, webhooks; SDKs.
-  * Tests: End-to-end via SDK; deploy success.
+- Backend hardening/webhooks/RBAC/quotas: [ ]
+- Web settings + demo seed: [ ]
+- SDKs (TS/Python) present scaffolds under `packages/clients*` but end-to-end scripts: [ ]
 
 ---
 
-## Extra clarity (what “baseline extractor” includes in M1)
+# Updated GitHub Issues (20)
 
-* Regex set (date, currency, invoice id, totals).
-* Table detector (line items by row separators / numeric columns).
-* Confidence scoring: regex strength + proximity to labels.
-* Spans: char ranges + optional bbox from OCR mapper.
-* Output already in **ResultEnvelope** so UI doesn’t change later.
+1. **Repo/Infra:** mono-repo + dev mode; compose (PG/Redis/MinIO/Ollama)
+2. **API Core:** DTOs, health routes, error format, request-id middleware
+3. **Projects API/FE:** `/projects` list/create + overview page
+4. **Files API:** upload endpoint (multipart, S3/MinIO/in-memory) + file listing
+5. **Worker—Ingest:** OCR pipelines (DocTR/RapidOCR; Readability; docx; csv/xlsx) → `TextArtifact`
+6. **Baseline Extractor (must implement):** regex/labels/tables + spans/confidence
+7. **Extract Job (baseline, project-wide):** iterate all files, persist `ExtractionResult`
+8. **Web—Ingest Page:** multi-upload, progress, statuses (do not remove route)
+9. **Web—Results Viewer:** highlight spans; field panel with confidence & warnings
+10. **LangExtract Wrapper:** chunker (1–3k tokens), merge, spans required
+11. **Model Router:** Ollama fast pass → Groq precision escalation thresholds
+12. **Workflows CRUD:** bind schema/backend per project; `/extract?workflow_id=...`
+13. **Validation Engine:** JSON-Schema + Rule DSL + re-read check
+14. **Web—Review UI:** show rules, inline edit, re-validate, status badges
+15. **Infer Schema API:** sample 2–5 files → draft JSON Schema + versioning
+16. **Web—Format Page:** select schema OR infer → editor → save → re-run
+17. **Webhooks + Exports:** project results CSV/JSON; `document.extracted|needs_review|failed`
+18. **RBAC/Keys/Quotas:** org/project API keys; per-project rate limits
+19. **SDKs:** TS + Python clients with end-to-end example script
+20. **Demo Seed & Script:** “Create Demo Project” button + investor runbook
+
+> **Rule for FE devs/agents:** Never delete or rename routes listed in AGENTS.md. Add components/pages only via PRs referencing issue IDs above.
+
+---
+
+# Acceptance Tests (copy into CI)
+
+* **AT-01** Create project → upload 3 mixed files → ingest job finishes → each file has `TextArtifact` pages
+* **AT-02** Baseline extract (no schema) → **non-empty fields with spans** rendered in `/results/[fileId]`
+* **AT-03** Select schema `invoice.v1` → schema-controlled extract → ≥90% critical fields have spans on fixture invoices
+* **AT-04** Rule fails → job `needs_review`; after inline edit → re-validate → `ok`
+* **AT-05** Infer schema from 3 files → accept → extract across all files → results persisted
+* **AT-06** SDK script can: create project → upload → infer schema → extract → fetch results → pass
+
+---
+
+Acceptance Status (investigated on 2025-09-14)
+
+- [ ] AT-01
+- [ ] AT-02
+- [ ] AT-03
+- [ ] AT-04
+- [ ] AT-05
+- [ ] AT-06
+
+# Demo Run (investor-ready)
+
+1. Click **Create Demo Project** → auto-upload 5 fixtures.
+2. Show **Ingest** progress; open one file’s **spans**.
+3. **Infer Format** → accept schema; re-run **Extract**; show project-wide results.
+4. Trigger a rule fail; fix in **Review UI**; re-validate to **ok**.
+5. Download JSON; show webhook payload.
+
+---

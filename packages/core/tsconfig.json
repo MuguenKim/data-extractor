@@ -7,16 +7,9 @@
     "composite": true
   },
   "include": [
-    "src/index.ts",
-    "src/types.ts",
-    "src/langextract/**/*",
-    "src/validation/**/*",
-    "src/schemas/**/*",
-    "src/shims.d.ts"
+    "src/**/*"
   ],
   "exclude": [
-    "src/ingest/**/*",
-    "src/extractors/**/*",
     "src/**/*.js"
   ]
 }

@@ -1,208 +1,122 @@
-# AGENTS.md — Structured Data Extractor (LangExtract • Groq • Ollama)
+# AGENTS.md — Structured Data Extractor (PoC-ready)
 
-> A single source of truth for AI coding agents working on this repo.
-> Follow the rules. Do not invent endpoints, files, or configs not listed here.
+> Single source of truth for engineers and AI agents. Do not remove pages/routes defined here. Implement logic; no stubs unless explicitly marked.
 
----
+## Mission
 
-## Mission & Scope
+Turn **uploaded files → extracted text → proposed/confirmed schema → validated structured JSON** for an entire **project**. PII is **not masked**.
 
-* **Goal:** Extract **strict, validated JSON** from any document (PDF, image, DOCX, HTML/URL, CSV, TXT), with **spans/offsets**, **confidence**, and **rule-based validation**.
-* **Tech pillars:** **LangExtract** (schema-controlled extraction), **Groq** + **Ollama** LLM backends, dual OCR, human review.
-* **Two modes:**
+## Core User Flow (must match UI & API)
 
-  1. **Schema-provided** → normalize to user’s JSON Schema.
-  2. **Schema-inferred** → we propose a draft schema from samples/brief; user edits & saves as a **Workflow Schema**.
-* **Non-goals:** We do **not** manage downstream ERPs/accounting; only extraction + validation + export.
+1. **Create Project**
+2. **Ingest Data** (upload 1..N files; extract text/layout; persist both)
+3. **Choose Format**: user selects a schema **or** clicks **Infer Format** (system proposes one; user edits/accepts)
+4. **Extract & Validate** (run over **all project files**; show results, spans, rule checks)
 
----
+## Data/Domain Model
 
-## Repo Layout (canonical)
+* **Project** `{id, name, created_by, created_at}`
+* **File** `{id, project_id, name, mime, pages, storage_uri, status: uploaded|processed|failed}`
+* **TextArtifact** `{file_id, page_no, text, char_offsets, bbox_map}`
+* **Schema** `{id, project_id|null, name, version, json_schema, kind: user|inferred}`
+* **Workflow** `{id, project_id, schema_id, backend: groq|ollama, ocr_policy, language_hint}`
+* **Job** `{id, project_id, type: ingest|infer_schema|extract, status, metrics, created_at}`
+* **ExtractionResult** `{file_id, schema_id, result_json, warnings, validation, status}`
 
-```
-/apps/api          # FastAPI/Express handlers, auth, webhooks
-/apps/worker       # queue consumers: OCR, chunk, extract, validate, export
-/apps/web          # Next.js UI: upload, review, schema editor
-/packages/core     # types, JSON-Schema, validators, rules DSL, LangExtract wrappers
-/packages/clients  # JS/TS + Python SDK
-/infrastructure    # Docker, compose, deploy, env templates
-```
+## Tech Pillars
 
----
+* Ingest: DocTR/RapidOCR → text + bbox; Readability for HTML; python-docx; pandas for CSV/XLSX
+* LLMs: **Groq** (precision) and **Ollama** (fast pass), both via LangExtract
+* Storage: Postgres (prod), in-memory (dev-min), S3/MinIO for files/artifacts
+* Queue: BullMQ (Node) or RQ (Python). Workers perform CPU/OCR/LLM tasks.
 
-## Setup Commands
-
-* Install deps: `pnpm i` (JS) • `uv sync` or `pip install -e .` (Python)
-* Dev: `pnpm --filter @web dev` • `pnpm --filter @api dev` • `pnpm --filter @worker dev`
-* Lint/Test: `pnpm test` • `pytest -q`
-* Services (dev, optional): `docker compose up` (Ollama required for local LLM; Postgres/Redis/MinIO are optional for persistence/scale)
-
----
-
-## Environment
+## Repo Layout (stable)
 
 ```
-# minimal dev: no external DB/Redis/S3 required
-# llm backends (set one or both)
-GROQ_API_KEY=...
-OLLAMA_HOST=http://localhost:11434
-
-# extraction defaults
-DEFAULT_BACKEND=groq          # groq|ollama
-DEFAULT_MODEL_GROQ=llama-3.1-70b-versatile
-DEFAULT_MODEL_OLLAMA=llama3.1:8b-instruct
-CONFIDENCE_THRESHOLD_CRITICAL=0.90
-
-# optional (prod/scale): enable persistence & queue
-DATABASE_URL=postgres://...
-REDIS_URL=redis://...
-S3_ENDPOINT=...
-S3_BUCKET=documents
-S3_ACCESS_KEY=...
-S3_SECRET_KEY=...
+/apps/web      # Next.js UI (must keep routes below)
+/apps/api      # REST API (project/file/schema/workflow/jobs)
+/apps/worker   # queue consumers: ingest, infer, extract, validate
+/packages/core # extractors (baseline+LE), validators, DTOs, schema tools
+/packages/clients # JS/TS + Python SDKs
+/infrastructure  # docker, compose, env, deploy
+/fixtures        # sample docs and golden outputs
 ```
 
----
+## UI — Pages (do not delete/rename)
 
-## Core Concepts
+* `/projects` — list/create
+* `/projects/[id]` — project overview (counts, last runs)
+* `/projects/[id]/ingest` — **upload** & ingest status per file (progress)
+* `/projects/[id]/format` — **Select Schema** OR **Infer Format** → **Schema Editor** → **Save schema**
+* `/projects/[id]/extract` — **Run Extraction** → job status → per-file result table
+* `/projects/[id]/results/[fileId]` — document viewer: values, confidence, spans, rules
+* `/settings` — backend (groq/ollama), OCR policy, language hint
 
-* **Workflow** = `{ schema, validators, backend, OCR policy, language hint, export targets }`
-* **Result JSON (always):**
+## Backends/Endpoints (stable contracts)
 
-  * `fields.{name}.value`
-  * `fields.{name}.confidence`
-  * `fields.{name}.spans[]` (page, start, end or bbox)
-  * `warnings[]`
-  * `validation.{rules_passed[], rules_failed[]}`
-  * `status: ok | needs_review | failed`
+* `POST /projects` → {id}
+* `GET /projects/:id` → summary
+* `POST /projects/:id/files` (multipart) → creates **Ingest Job**
+* `GET /projects/:id/files` → list with statuses
+* `POST /projects/:id/schemas` → save user schema
+* `POST /projects/:id/infer_schema` → creates **Infer Job**; returns **draft schema** (on completion)
+* `POST /projects/:id/workflows` → bind schema + options (backend, OCR policy, lang)
+* `POST /projects/:id/extract?workflow_id=...` → creates **Extract Job** for **all files**
+* `GET /jobs/:id` → status + metrics
+* `GET /projects/:id/results` → per-file extraction summaries
+* `GET /projects/:id/results/:fileId` → full ResultEnvelope (fields, spans, validation)
 
----
+### DTO snippets (strict)
 
-## Agents & Responsibilities
+```ts
+// ResultEnvelope
+{
+  schema_id: "invoice.v1",
+  file_id: "uuid",
+  fields: {
+    invoice_number: { value: "INV-2025-003", confidence: 0.92, spans: [{page:1,start:234,end:245}] },
+    lines: [
+      { desc:"Clutch kit", qty:1, unit_price:249.9, confidence:0.88, spans:[...] }
+    ],
+    grand_total: { value: 297.38, confidence: 0.99, spans:[...] }
+  },
+  warnings: ["low confidence on lines[2].unit_price"],
+  validation: {
+    schema_valid:true,
+    rules_passed:["sum(lines)==subtotal","subtotal+tax==grand_total"],
+    rules_failed:[]
+  },
+  status: "ok" // ok|needs_review|failed
+}
+```
 
-1. **Orchestrator Agent**
+## Extraction Logic (implement, no placeholders)
 
-   * Creates Job plan: ingest → preprocess → chunk → extract → merge → validate → export.
-   * Retries only via listed backoffs; no infinite loops.
+* **Baseline extractor (M1)**: regex/label heuristics (invoice no., dates, currency, totals, simple table rows). Returns **spans** (char offsets; bbox if available). Confidence = regex strength + label proximity.
+* **LangExtract extractor (M2)**: chunk text (1–3k tokens, 10–15% overlap), run schema-controlled extraction with **spans required**. Merge per field: highest confidence, tie-break by label proximity.
 
-2. **Ingest/OCR Agent**
+## Validation (M3)
 
-   * Normalizes input to text + layout map.
-   * PDF/Image → DocTR/RapidOCR (fallback Tesseract).
-   * HTML/URL → Readability + DOM text; snapshot saved.
+* **Layer 1:** JSON-Schema (types/required/format)
+* **Layer 2:** Rule DSL: `equals`, `add`, `in_set`, `match`, `date_le`
+* **Layer 3:** Grounding check: re-read span window for low-confidence
 
-3. **Schema Inference Agent (for schema-inferred mode)**
+## PII Policy
 
-   * Samples 2–5 docs; proposes **draft JSON Schema** with: `type`, `format`, `pattern`, `enum`, `required`, and `x-meta.example`.
-   * Promotes fields that are stable across samples to `required`.
-   * Never mark `required` if field has >10% nulls across samples.
+* **No masking.** Store and return data exactly as provided.
 
-4. **Extraction Agent (LangExtract wrapper)**
+## Worker Pipeline (project-wide)
 
-   * Runs schema-controlled extraction **per chunk** using selected LLM backend.
-   * Must return spans; if span missing → set field `value=null` + add warning.
+* **Ingest Job**: upload → OCR/parse → persist `TextArtifact` per page → file.status=processed
+* **Infer Job**: sample 2–5 project files → propose **draft schema** → store as `Schema(kind="inferred")`
+* **Extract Job**: for each processed file → run extractor (LangExtract or baseline) → validate → persist `ExtractionResult`
 
-5. **Merge Agent**
+## Guardrails for Agents
 
-   * Consolidates chunk-level outputs by: higher confidence wins; tie-break by proximity to headings/labels; preserve all spans.
-
-6. **Validation Agent**
-
-   * **Layer 1:** JSON-Schema validation (types, formats, required).
-   * **Layer 2:** Business rules (sum lines, tax math, currency codes, regex for VAT/IBAN/phone).
-   * **Layer 3:** Grounding check (re-parse span window to confirm low-confidence values).
-
-7. **Review Agent (HITL)**
-
-   * Surfaces low-confidence/failed rules to UI with highlighted spans; applies human fixes; stores before/after pairs as exemplars.
-
-8. **Export/Billing Agent**
-
-   * Exports to JSON/CSV/webhook/DB.
-   * Tracks pages, tokens, retries by org/workflow for quota & billing.
-
----
-
-## Tools & Models
-
-* **LLMs:**
-
-  * `groq` (primary precision pass) via `DEFAULT_MODEL_GROQ`.
-  * `ollama` (local fast pass) via `DEFAULT_MODEL_OLLAMA`.
-* **OCR:** DocTR → RapidOCR; fallback Tesseract.
-* **Vector/Memory:** pgvector for exemplars & vendor patterns (optional; not required for MVP).
-* **Queue:** BullMQ/Redis (Node) or RQ (Python). In dev without Redis, use an in-process queue. Use exponential backoff (max 3).
-
----
-
-## Endpoints (stable)
-
-* `POST /workflows` → create/update (schema or “infer” flag)
-* `POST /infer_schema` → files + optional brief → returns draft schema
-* `POST /extract?workflow_id=...` → files|url|text → `job_id`
-* `GET /jobs/{id}` → status + result
-* `POST /validate` → run rule DSL on arbitrary JSON
-* Webhooks: `document.extracted`, `document.needs_review`, `document.failed`
+* Do **not** remove routes/pages listed above.
+* Implement baseline and LangExtract extractors **fully**; no TODO-only modules.
+* Always return **spans**; if none, set value `null` + warning.
+* Project-level **Extract** must iterate **all files** in the project.
 
 ---
 
-## Prompts / Operational Rules (must follow)
-
-* **Never** hallucinate values; if not grounded by span → return `null` + warning.
-* Prefer **label-led extraction** (“Invoice No.”, “Total TTC”, etc.) before free-text guesses.
-* Keep chunks \~1–3k tokens with 10–15% overlap. Merge deterministically.
-* Escalate: if `critical_confidence < threshold` → rerun with stricter prompt or higher-capacity Groq model.
-
----
-
-## Validation DSL (mini)
-
-* `equals(sum(lines.amount), subtotal, tol=0.01)`
-* `equals(add(subtotal, tax_total), grand_total, tol=0.01)`
-* `in_set(currency, ["USD","EUR","TND"])`
-* `match(vat_id, "^[A-Z0-9]{6,}$")`
-* `date_le(issue_date, due_date)`
-
----
-
-## Security & PII
-
-* Mask PII by default (names, phone, IBAN) at storage boundary unless workflow opts out.
-* Row-level tenancy (org\_id); artifact access requires org scope + job permission.
-* All exports logged with checksum + requester.
-
----
-
-## Testing & KPIs
-
-* Golden sets per schema; report **field accuracy**, **edit rate**, **first-pass yield**, **AHT**.
-* A job **fails** if JSON-Schema invalid **or** any critical rule fails.
-
----
-
-## When to Use LangGraph
-
-* **MVP:** not required.
-* Add only for multi-tool recovery, doc-type routing, or self-heal loops once baseline is stable.
-
----
-
-## Glossary
-
-* **Span:** source character range or bbox proving the value.
-* **Critical field:** totals, dates, IDs, currency.
-* **Workflow Schema:** versioned JSON Schema bound to a workflow.
-
----
-
-## References for Agents (format inspiration)
-
-* AGENTS.md overview & examples (structure & intent). ([agents.md][1])
-* Agents.md site (purpose and best practices). ([Agents.md Guide for OpenAI Codex][2])
-
----
-
-**Contact/Owner:** Walid (Maintainer). PRs must include unit tests for new validators and a golden-set diff.
-
-[1]: https://agents.md/?utm_source=chatgpt.com "AGENTS.md"
-[2]: https://agentsmd.net/?utm_source=chatgpt.com "Agents.md Guide for OpenAI Codex - Enhance AI Coding"
