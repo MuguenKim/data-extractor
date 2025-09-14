@@ -3,15 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.extractViaBackend = extractViaBackend;
 const groq_1 = require("./backends/groq");
 const ollama_1 = require("./backends/ollama");
-const local_1 = require("./local");
 async function extractViaBackend(args) {
     const env = process.env;
     const defaultBackend = env.DEFAULT_BACKEND ?? "groq";
     const selected = args.backend === "auto" ? defaultBackend : args.backend;
-    if (selected === "mock") {
-        const result = await (0, local_1.extractLocal)(args.schema, args.chunk);
-        return { result, backend: "mock" };
-    }
     if (selected === "ollama") {
         const model = args.modelHints?.ollama ?? env.DEFAULT_MODEL_OLLAMA ?? "llama3.1:8b-instruct";
         const host = env.OLLAMA_HOST;

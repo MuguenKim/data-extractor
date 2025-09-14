@@ -82,6 +82,17 @@ export default function ResultViewer() {
                 })}
               </tbody>
             </table>
+            <div style={{ marginTop: 8 }}>
+              <button onClick={() => {
+                const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `result-${fileId}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}>Download JSON</button>
+            </div>
             {env.warnings && env.warnings.length > 0 && (
               <div style={{ marginTop: 8, color: '#a67c00' }}>
                 Warnings: {env.warnings.join(', ')}

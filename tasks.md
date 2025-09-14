@@ -87,12 +87,12 @@ Status (investigated on 2025-09-14)
   - [x] Baseline extractor with spans/confidence (`packages/core/src/extractors/baseline.ts`)
   - [x] API endpoints for projects/files/ingest job/baseline extract (in-memory dev)
 - Frontend
-  - [ ] Required routes `/projects`, `/projects/[id]`, `/ingest`, `/results/[fileId]`
-  - [ ] Results viewer with highlighted spans
+  - [X] Required routes `/projects`, `/projects/[id]`, `/ingest`, `/results/[fileId]`
+  - [X] Results viewer with highlighted spans
 - Tests
-  - [ ] Golden tests and ingest success metrics implemented (see `tests/*` and `fixtures/golden/baseline/*`)
+  - [X] Golden tests and ingest success metrics implemented (see `tests/*` and `fixtures/golden/baseline/*`)
 - DoD
-  - [ ] End-to-end upload → spans in results for all project files (dev-min JSON ingest)
+  - [X] End-to-end upload → spans in results for all project files (dev-min JSON ingest)
 
 ## M2 — LangExtract + Groq/Ollama Core
 
@@ -121,12 +121,12 @@ Status (investigated on 2025-09-14)
   - [x] Extraction endpoint (`POST /projects/:id/extract?workflow_id=...`) defaults to Active Workflow when param omitted
   - [x] Groq/Ollama calls 
 - Frontend
-  - [ ] `/projects/[id]/format` implemented; `/projects/[id]` shows Selected Format when set; `/workflows` lists workflows across projects
+  - [x] `/projects/[id]/format` implemented; `/projects/[id]` shows Selected Format when set; `/workflows` lists workflows across projects
   - [x] Job page allows JSON download of result
 - Tests
-  - [ ] Contract tests for spans coverage
+  - [x] Contract tests for spans coverage
 - DoD
-  - [ ] Project-wide schema-controlled extraction with spans
+  - [x] Project-wide schema-controlled extraction with spans
 
 ## M3 — Validation + Review UI
 

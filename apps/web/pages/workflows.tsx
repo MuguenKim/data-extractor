@@ -2,87 +2,58 @@ import { useEffect, useState } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
-type Workflow = { id: string; backend: string; schema: { id: string; title?: string; fields: any[] } };
+type WorkflowRow = { id: string; backend: string; schema: { id: string }; project_ids: string[] };
 
 export default function Workflows() {
-  const [wf, setWf] = useState<Workflow | null>(null);
-  const [text, setText] = useState("");
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [extracting, setExtracting] = useState(false);
+  const [list, setList] = useState<WorkflowRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("wfId");
-    if (saved) {
-      // no GET endpoint; store minimal info
-      setWf({ id: saved, backend: "auto", schema: { id: "invoice.v1", fields: [] } });
-    }
-  }, []);
-
-  async function createInvoiceWorkflow() {
-    setCreating(true);
+  async function load() {
+    setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`${API}/workflows`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schema_id: 'invoice.v1', backend: 'mock' }),
-      });
+      const res = await fetch(`${API}/workflows`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-      setWf(data);
-      localStorage.setItem("wfId", data.id);
-    } catch (e) {
-      alert(String(e));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setList(data || []);
+    } catch (e: any) {
+      setError(String(e));
     } finally {
-      setCreating(false);
+      setLoading(false);
     }
   }
 
-  async function runExtract() {
-    if (!wf) return alert('Create a workflow first');
-    setExtracting(true);
-    try {
-      const res = await fetch(`${API}/extract?workflow_id=${wf.id}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Extract failed');
-      setJobId(data.job_id);
-      window.location.href = `/jobs/${data.job_id}`;
-    } catch (e) {
-      alert(String(e));
-    } finally {
-      setExtracting(false);
-    }
-  }
+  useEffect(() => { load(); }, []);
 
   return (
     <main style={{ padding: 24, fontFamily: 'sans-serif' }}>
       <h1>Workflows</h1>
-      <div style={{ marginBottom: 16 }}>
-        <button onClick={createInvoiceWorkflow} disabled={creating}>
-          {creating ? 'Creating…' : 'Create Invoice Workflow (invoice.v1)'}
-        </button>
-        {wf && (
-          <span style={{ marginLeft: 12 }}>Workflow ID: <code>{wf.id}</code></span>
-        )}
-      </div>
-      <h2>Try Extraction</h2>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Paste invoice text here"
-        rows={12}
-        style={{ width: '100%', fontFamily: 'monospace' }}
-      />
+      {loading && <p>Loading…</p>}
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      <table style={{ borderCollapse: 'collapse', width: '100%', marginTop: 12 }}>
+        <thead>
+          <tr>
+            <th align="left">ID</th>
+            <th align="left">Backend</th>
+            <th align="left">Schema</th>
+            <th align="left">Projects</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((w) => (
+            <tr key={w.id}>
+              <td style={{ borderBottom: '1px solid #eee', padding: '6px 4px' }}><code>{w.id}</code></td>
+              <td style={{ borderBottom: '1px solid #eee', padding: '6px 4px' }}>{w.backend}</td>
+              <td style={{ borderBottom: '1px solid #eee', padding: '6px 4px' }}><code>{w.schema?.id}</code></td>
+              <td style={{ borderBottom: '1px solid #eee', padding: '6px 4px' }}>{w.project_ids?.length ? w.project_ids.join(', ') : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <div style={{ marginTop: 12 }}>
-        <button onClick={runExtract} disabled={!wf || extracting}>
-          {extracting ? 'Submitting…' : 'Extract'}
-        </button>
+        <button onClick={load}>Refresh</button>
       </div>
-      {jobId && <p>Submitted job: {jobId}</p>}
     </main>
   );
 }

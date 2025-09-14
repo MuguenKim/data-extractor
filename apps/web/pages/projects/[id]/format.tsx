@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 
-type Backend = 'auto' | 'groq' | 'ollama' | 'mock';
+type Backend = 'auto' | 'groq' | 'ollama';
 
 export default function FormatPage() {
   const router = useRouter();
@@ -10,9 +10,24 @@ export default function FormatPage() {
   const [backend, setBackend] = useState<Backend>('auto');
   const [schemaId, setSchemaId] = useState<string>('invoice.v1');
   const [workflow, setWorkflow] = useState<any | null>(null);
+  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [activeWorkflowId, setActiveWorkflowId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [running, setRunning] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+
+  async function loadWorkflows() {
+    if (!id) return;
+    const res = await fetch(`http://localhost:3001/projects/${id}/workflows`);
+    const data = await res.json();
+    if (res.ok) {
+      setWorkflows(data.workflows || []);
+      setActiveWorkflowId(data.active_workflow_id || null);
+    }
+  }
+
+  useEffect(() => { loadWorkflows(); }, [id]);
 
   async function saveWorkflow() {
     if (!id) return;
@@ -26,6 +41,8 @@ export default function FormatPage() {
       const data = await res.json();
       if (res.ok) {
         setWorkflow(data);
+        await activateWorkflow(data.id);
+        await loadWorkflows();
       } else {
         alert(`Failed to save workflow: ${data?.error || res.status}`);
       }
@@ -34,24 +51,40 @@ export default function FormatPage() {
     }
   }
 
-  async function runExtraction() {
+  async function activateWorkflow(wfId: string) {
     if (!id) return;
-    let wf = workflow;
-    if (!wf) {
-      await saveWorkflow();
-      wf = workflow;
-    }
-    wf = wf || workflow; // in case state delay
-    const wfId = (wf && wf.id) ? wf.id : undefined;
-    if (!wfId) return;
-    setRunning(true);
+    setActivating(true);
     try {
-      const res = await fetch(`http://localhost:3001/projects/${id}/extract?workflow_id=${encodeURIComponent(wfId)}`, {
-        method: 'POST'
-      });
+      const res = await fetch(`http://localhost:3001/projects/${id}/workflows/${encodeURIComponent(wfId)}/activate`, { method: 'PATCH' });
       const data = await res.json();
       if (!res.ok) {
-        alert(`Failed to start extraction: ${data?.error || res.status}`);
+        alert(`Failed to activate workflow: ${data?.error || res.status}`);
+        return;
+      }
+      setActiveWorkflowId(data.active_workflow_id || wfId);
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  async function runExtraction() {
+    if (!id) return;
+    // rely on Active Workflow
+    if (!activeWorkflowId) {
+      // Try creating + activating one automatically
+      await saveWorkflow();
+    }
+    if (!activeWorkflowId && !workflow?.id) return;
+    setRunning(true);
+    try {
+      const res = await fetch(`http://localhost:3001/projects/${id}/extract`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data?.error === 'workflow_required') {
+          alert('No Active Workflow set. Please create/activate a workflow.');
+        } else {
+          alert(`Failed to start extraction: ${data?.error || res.status}`);
+        }
         setRunning(false);
         return;
       }
@@ -88,6 +121,9 @@ export default function FormatPage() {
   return (
     <div style={{ padding: 20 }}>
       <h1>Choose Format & Backend</h1>
+      <div style={{ marginBottom: 12, color: '#444' }}>
+        Active Workflow: {activeWorkflowId ? <code>{activeWorkflowId}</code> : 'None'}
+      </div>
       <div style={{ display: 'flex', gap: 24 }}>
         <div style={{ flex: 1 }}>
           <h3>Schema</h3>
@@ -107,21 +143,31 @@ export default function FormatPage() {
           <div>
             <label><input type="radio" name="backend" checked={backend === 'ollama'} onChange={() => setBackend('ollama')} /> Ollama</label>
           </div>
-          <div>
-            <label><input type="radio" name="backend" checked={backend === 'mock'} onChange={() => setBackend('mock')} /> Baseline (mock)</label>
-          </div>
+          
         </div>
       </div>
       <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
-        <button disabled={!id || saving} onClick={saveWorkflow}>{saving ? 'Saving...' : (workflow ? 'Update Workflow' : 'Save Workflow')}</button>
-        <button disabled={!id || running || (!workflow && saving)} onClick={runExtraction}>{running ? 'Running...' : 'Run Extraction'}</button>
+        <button disabled={!id || saving || activating} onClick={saveWorkflow}>{saving ? 'Saving...' : (workflow ? 'Save + Activate' : 'Save + Activate')}</button>
+        <button disabled={!id || running || activating || saving} onClick={runExtraction}>{running ? 'Running...' : 'Run Extraction'}</button>
       </div>
-      {workflow && (
-        <div style={{ marginTop: 12, color: '#555' }}>
-          Saved workflow: <code>{workflow.id}</code> (backend: {workflow.backend}, schema: {workflow.schema?.id})
+      {workflows?.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <h3>Project Workflows</h3>
+          <ul>
+            {workflows.map((wf) => (
+              <li key={wf.id}>
+                <code>{wf.id}</code> — backend: {wf.backend}, schema: {wf.schema?.id}
+                {activeWorkflowId !== wf.id && (
+                  <button style={{ marginLeft: 8 }} disabled={activating} onClick={() => activateWorkflow(wf.id)}>
+                    {activating ? 'Activating…' : 'Activate'}
+                  </button>
+                )}
+                {activeWorkflowId === wf.id && <span style={{ marginLeft: 8, color: 'green' }}>(Active)</span>}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
   );
 }
-

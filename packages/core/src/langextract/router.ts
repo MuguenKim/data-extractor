@@ -1,7 +1,6 @@
 import { Backend, ExtractionChunk, ResultEnvelope, WorkflowSchema } from "../types";
 import { callGroqLangExtract } from "./backends/groq";
 import { callOllamaLangExtract } from "./backends/ollama";
-import { extractLocal } from "./local";
 import { getLogger } from "../logger";
 
 export interface RouteArgs {
@@ -18,12 +17,6 @@ export async function extractViaBackend(
   const env = process.env;
   const defaultBackend = (env.DEFAULT_BACKEND as Backend | undefined) ?? "groq";
   const selected = args.backend === "auto" ? defaultBackend : args.backend;
-
-  if (selected === "mock") {
-    const result = await extractLocal(args.schema, args.chunk);
-    log.debug('backend.local', { backend: 'mock', chunk_id: args.chunk.id });
-    return { result, backend: "mock" };
-  }
 
   if (selected === "ollama") {
     const model = args.modelHints?.ollama ?? env.DEFAULT_MODEL_OLLAMA ?? "llama3.1:8b-instruct";

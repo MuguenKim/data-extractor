@@ -1,5 +1,4 @@
 import { ResultEnvelope, WorkflowSchema, ExtractionChunk } from "../../types";
-import { extractLocal } from "../local";
 import { getLogger } from "../../logger";
 
 interface CallArgs {
@@ -10,12 +9,9 @@ interface CallArgs {
 }
 
 export async function callOllamaLangExtract({ schema, chunk, model, host }: CallArgs): Promise<ResultEnvelope> {
-  // If no host, fall back to local extractor for dev-min
+  // Require host; if missing, surface a clear error
   const log = getLogger('core').child({});
-  if (!host) {
-    log.warn('backend.ollama.no_host_fallback', { chunk_id: chunk.id, model });
-    return extractLocal(schema, chunk);
-  }
+  if (!host) throw new Error("OLLAMA_HOST missing; cannot call Ollama backend");
 
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(schema, chunk);
@@ -34,15 +30,16 @@ export async function callOllamaLangExtract({ schema, chunk, model, host }: Call
       }),
     });
     if (!resp.ok) {
-      log.warn('backend.ollama.http_error_fallback', { status: resp.status, chunk_id: chunk.id, model });
-      return extractLocal(schema, chunk);
+      const body = await resp.text();
+      log.warn('backend.ollama.http_error', { status: resp.status, chunk_id: chunk.id, model });
+      throw new Error(`Ollama HTTP ${resp.status}: ${body?.slice(0,120)}`);
     }
     const data = await resp.json();
     const content = data?.response ?? "";
     return normalizeModelOutput(content, schema, chunk);
   } catch (e: any) {
-    log.warn('backend.ollama.exception_fallback', { error: e?.message || String(e), chunk_id: chunk.id, model });
-    return extractLocal(schema, chunk);
+    log.warn('backend.ollama.exception', { error: e?.message || String(e), chunk_id: chunk.id, model });
+    throw e;
   }
 }
 
@@ -80,7 +77,7 @@ async function normalizeModelOutput(raw: string, schema: WorkflowSchema, chunk: 
     }
   }
   if (!parsed || typeof parsed !== "object") {
-    return extractLocal(schema, chunk);
+    throw new Error("Ollama returned non-JSON or invalid JSON");
   }
   const outFields: Record<string, any> = {};
   const warnings: string[] = Array.isArray(parsed.warnings) ? parsed.warnings.slice() : [];

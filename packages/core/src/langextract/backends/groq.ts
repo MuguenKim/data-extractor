@@ -1,5 +1,4 @@
 import { ResultEnvelope, WorkflowSchema, ExtractionChunk } from "../../types";
-import { extractLocal } from "../local";
 import { getLogger } from "../../logger";
 
 interface CallArgs {
@@ -10,12 +9,9 @@ interface CallArgs {
 }
 
 export async function callGroqLangExtract({ schema, chunk, model, apiKey }: CallArgs): Promise<ResultEnvelope> {
-  // If no API key, fall back to local extractor to keep dev-min functional.
+  // Require API key; if missing, surface a clear error
   const log = getLogger('core').child({});
-  if (!apiKey) {
-    log.warn('backend.groq.no_api_key_fallback', { chunk_id: chunk.id, model });
-    return extractLocal(schema, chunk);
-  }
+  if (!apiKey) throw new Error("GROQ_API_KEY missing; cannot call Groq backend");
 
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(schema, chunk);
@@ -39,17 +35,16 @@ export async function callGroqLangExtract({ schema, chunk, model, apiKey }: Call
     });
 
     if (!resp.ok) {
-      log.warn('backend.groq.http_error_fallback', { status: resp.status, chunk_id: chunk.id, model });
-      // Network reachable but API rejected; fall back to local
-      return extractLocal(schema, chunk);
+      const body = await resp.text();
+      log.warn('backend.groq.http_error', { status: resp.status, chunk_id: chunk.id, model });
+      throw new Error(`Groq HTTP ${resp.status}: ${body?.slice(0,120)}`);
     }
     const data = await resp.json();
     const content = data?.choices?.[0]?.message?.content ?? "";
     return normalizeModelOutput(content, schema, chunk);
   } catch (e: any) {
-    // Network not available or other error; fall back
-    log.warn('backend.groq.exception_fallback', { error: e?.message || String(e), chunk_id: chunk.id, model });
-    return extractLocal(schema, chunk);
+    log.warn('backend.groq.exception', { error: e?.message || String(e), chunk_id: chunk.id, model });
+    throw e;
   }
 }
 
@@ -90,8 +85,7 @@ async function normalizeModelOutput(raw: string, schema: WorkflowSchema, chunk: 
   }
 
   if (!parsed || typeof parsed !== "object") {
-    // Fall back to local if model output is unusable
-    return extractLocal(schema, chunk);
+    throw new Error("Groq returned non-JSON or invalid JSON");
   }
 
   const outFields: Record<string, any> = {};
