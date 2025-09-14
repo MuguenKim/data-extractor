@@ -1,5 +1,5 @@
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface FileRec { id: string; name: string; status: string; pages: number; mime: string }
 
@@ -12,9 +12,12 @@ async function fileToBase64(f: File): Promise<string> {
   return btoa(binary);
 }
 
+type UploadMode = 'text' | 'files' | 'url';
+
 export default function IngestPage() {
   const router = useRouter();
   const { id } = router.query as { id?: string };
+  const [mode, setMode] = useState<UploadMode>('text');
   const [name, setName] = useState('sample.txt');
   const [text, setText] = useState('Invoice No: INV-2025-003\nDate: 2025-09-01\nSubtotal: 100.00\nVAT: 20.00\nTotal: 120.00');
   const [submitting, setSubmitting] = useState(false);
@@ -22,12 +25,16 @@ export default function IngestPage() {
   const [files, setFiles] = useState<FileRec[]>([]);
   const [localFiles, setLocalFiles] = useState<File[]>([]);
   const [url, setUrl] = useState('');
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string>('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const apiBase = useMemo(() => 'http://localhost:3001', []);
 
   async function submitText() {
     if (!id) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`http://localhost:3001/projects/${id}/files`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, mime: 'text/plain', text }) });
+      const res = await fetch(`${apiBase}/projects/${id}/files`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, mime: 'text/plain', text }) });
       const data = await res.json();
       setJobId(data?.job_id || null);
     } finally {
@@ -40,7 +47,7 @@ export default function IngestPage() {
     setSubmitting(true);
     try {
       const filesPayload = await Promise.all(localFiles.map(async (f) => ({ name: f.name, mime: f.type || 'application/octet-stream', data_base64: await fileToBase64(f) })));
-      const res = await fetch(`http://localhost:3001/projects/${id}/files`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ files: filesPayload }) });
+      const res = await fetch(`${apiBase}/projects/${id}/files`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ files: filesPayload }) });
       const data = await res.json();
       setJobId(data?.job_id || null);
     } finally {
@@ -52,7 +59,7 @@ export default function IngestPage() {
     if (!id || !url.trim()) return;
     setSubmitting(true);
     try {
-      const res = await fetch(`http://localhost:3001/projects/${id}/files`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+      const res = await fetch(`${apiBase}/projects/${id}/files`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
       const data = await res.json();
       setJobId(data?.job_id || null);
     } finally {
@@ -64,7 +71,7 @@ export default function IngestPage() {
     let t: any;
     async function poll() {
       if (!jobId) return;
-      const r = await fetch(`http://localhost:3001/jobs/${jobId}`);
+      const r = await fetch(`${apiBase}/jobs/${jobId}`);
       const d = await r.json();
       if (d.status === 'done' || d.status === 'failed') {
         setJobId(null);
@@ -79,61 +86,116 @@ export default function IngestPage() {
 
   async function refreshFiles() {
     if (!id) return;
-    const res = await fetch(`http://localhost:3001/projects/${id}/files`);
+    const res = await fetch(`${apiBase}/projects/${id}/files`);
     const data = await res.json();
     setFiles(data || []);
   }
 
   useEffect(() => { refreshFiles(); }, [id]);
 
+  async function previewFile(fileId: string) {
+    if (!id) return;
+    setSelectedFileId(fileId);
+    setPreviewLoading(true);
+    setPreviewText('');
+    try {
+      const r = await fetch(`${apiBase}/projects/${id}/files/${fileId}/text`);
+      const t = await r.text();
+      setPreviewText(t || '(no text)');
+    } catch (e) {
+      setPreviewText('(failed to load text)');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <h1>Ingest Files</h1>
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
-          <h3>Paste Text</h3>
+
+      <div style={{ marginBottom: 12 }}>
+        <strong>Choose Upload Method:&nbsp;</strong>
+        <label style={{ marginRight: 12 }}>
+          <input type="radio" name="mode" checked={mode==='text'} onChange={() => setMode('text')} /> Text
+        </label>
+        <label style={{ marginRight: 12 }}>
+          <input type="radio" name="mode" checked={mode==='files'} onChange={() => setMode('files')} /> File(s)
+        </label>
+        <label>
+          <input type="radio" name="mode" checked={mode==='url'} onChange={() => setMode('url')} /> URL
+        </label>
+      </div>
+
+      {/* Uploader area */}
+      <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, marginBottom: 16 }}>
+        {mode === 'text' && (
           <div>
-            <label>Filename:&nbsp;</label>
-            <input value={name} onChange={e => setName(e.target.value)} />
+            <div>
+              <label>Filename:&nbsp;</label>
+              <input value={name} onChange={e => setName(e.target.value)} />
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <label>Text content:</label>
+              <textarea value={text} onChange={e => setText(e.target.value)} rows={8} style={{ width: '100%' }} />
+            </div>
+            <button onClick={submitText} disabled={submitting || !id}>{submitting ? 'Uploading...' : 'Upload Text'}</button>
           </div>
-          <div style={{ marginTop: 8 }}>
-            <label>Text content:</label>
-            <textarea value={text} onChange={e => setText(e.target.value)} rows={10} style={{ width: '100%' }} />
+        )}
+
+        {mode === 'files' && (
+          <div>
+            <input type="file" multiple onChange={e => setLocalFiles(Array.from(e.target.files || []))} />
+            <div style={{ marginTop: 8 }}>
+              <button onClick={submitFiles} disabled={submitting || !id || localFiles.length === 0}>{submitting ? 'Uploading...' : `Upload ${localFiles.length || ''} File(s)`}</button>
+            </div>
           </div>
-          <button onClick={submitText} disabled={submitting || !id}>{submitting ? 'Uploading...' : 'Upload Text'}</button>
-        </div>
-        <div style={{ flex: 1 }}>
-          <h3>Upload Files</h3>
-          <input type="file" multiple onChange={e => setLocalFiles(Array.from(e.target.files || []))} />
-          <div style={{ marginTop: 8 }}>
-            <button onClick={submitFiles} disabled={submitting || !id || localFiles.length === 0}>{submitting ? 'Uploading...' : `Upload ${localFiles.length || ''} File(s)`}</button>
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <h4>Fetch URL</h4>
+        )}
+
+        {mode === 'url' && (
+          <div>
             <input placeholder="https://example.com/page" value={url} onChange={e => setUrl(e.target.value)} style={{ width: '100%' }} />
             <div style={{ marginTop: 8 }}>
               <button onClick={submitUrl} disabled={submitting || !id || !url.trim()}>{submitting ? 'Fetching...' : 'Ingest URL'}</button>
             </div>
           </div>
-          {jobId && <div style={{ marginTop: 8 }}>Job: {jobId} (processing)</div>}
-        </div>
-        <div style={{ flex: 1 }}>
-          <h3>Files</h3>
+        )}
+        {jobId && <div style={{ marginTop: 8 }}>Job: {jobId} (processing)</div>}
+      </div>
+
+      {/* Two-panel area: left list, right preview */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 16, alignItems: 'stretch' }}>
+        <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, overflow: 'auto' }}>
+          <h3 style={{ marginTop: 0 }}>Files</h3>
           <table cellPadding={6} style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th>Name</th><th>Status</th><th>Pages</th><th>Actions</th></tr></thead>
+            <thead><tr><th style={{textAlign:'left'}}>Name</th><th>Status</th><th>Pages</th><th>Action</th></tr></thead>
             <tbody>
               {files.map(f => (
-                <tr key={f.id}>
-                  <td>{f.name}</td>
+                <tr key={f.id} style={{ background: selectedFileId===f.id ? '#f7faff' : undefined }}>
+                  <td style={{ wordBreak: 'break-all' }}>{f.name}</td>
                   <td>{f.status}</td>
                   <td>{f.pages}</td>
                   <td>
-                    <a href={`/projects/${id}/results/${f.id}`}>View Results</a>
+                    <button onClick={() => previewFile(f.id)}>Preview Parsed</button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+        <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column' }}>
+          <h3 style={{ marginTop: 0 }}>Parsed Preview</h3>
+          {!selectedFileId && <div style={{ color: '#666' }}>Select a file to preview parsed text.</div>}
+          {selectedFileId && (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div style={{ marginBottom: 8, color: '#666' }}>File ID: {selectedFileId}</div>
+              <div style={{ flex: 1, minHeight: 300, border: '1px solid #ddd', borderRadius: 4, background: '#fafafa', padding: 8, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
+                {previewLoading ? 'Loading…' : previewText}
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <a href={`/projects/${id}/results/${selectedFileId}`} target="_blank" rel="noreferrer">Open Structured Result page</a>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
