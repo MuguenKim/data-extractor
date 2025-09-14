@@ -40,7 +40,7 @@ exports.ingestBufferAsync = ingestBufferAsync;
 const html_1 = require("./html");
 const text_1 = require("./text");
 const csv_1 = require("./csv");
-const pii_1 = require("../pii");
+// PII Policy: no masking at ingest; preserve content as-is.
 const lang_1 = require("../lang");
 const email_1 = require("./email");
 const spreadsheet_1 = require("./spreadsheet");
@@ -129,11 +129,7 @@ function ingestBuffer(buf, opts = {}) {
     // Language hint
     const lang = opts.languageHint || (0, lang_1.detectLanguage)(doc.text || '');
     doc.language = lang;
-    // PII mask at storage boundary (default true)
-    const doMask = opts.maskPII !== false;
-    if (doMask && doc.text) {
-        doc.text = (0, pii_1.maskPII)(doc.text);
-    }
+    // PII Policy: do not mask. Preserve text exactly as provided.
     return doc;
 }
 // Async variant for adapters that require async libs (pdfjs, mammoth, unzipper)
@@ -182,9 +178,6 @@ async function ingestBufferAsync(buf, opts = {}) {
     }
     const lang = opts.languageHint || (0, lang_1.detectLanguage)(doc.text || '');
     doc.language = lang;
-    const doMask = opts.maskPII !== false;
-    if (doMask && doc.text) {
-        doc.text = (0, pii_1.maskPII)(doc.text);
-    }
+    // PII Policy: do not mask. Preserve text exactly as provided.
     return doc;
 }

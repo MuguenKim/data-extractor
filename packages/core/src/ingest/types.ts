@@ -29,7 +29,8 @@ export type DocumentText = {
 
 export type IngestOptions = {
   languageHint?: string;
-  maskPII?: boolean; // default true
+  // Deprecated/no-op: PII is never masked during ingest; content is preserved.
+  maskPII?: boolean;
   mime?: string;
   filename?: string;
 };

@@ -4,7 +4,6 @@ import { ingestCSV } from './csv';
 import { ingestPlaceholder } from './placeholders';
 import { DocumentText, IngestOptions } from './types';
 import { getLogger } from '../logger';
-import { maskPII } from '../pii';
 import { detectLanguage } from '../lang';
 import { ingestEML, ingestMSG, ingestMHTML } from './email';
 import { ingestSpreadsheet } from './spreadsheet';
@@ -89,11 +88,7 @@ export function ingestBuffer(buf: Buffer, opts: IngestOptions = {}): DocumentTex
   const lang = opts.languageHint || detectLanguage(doc.text || '');
   doc.language = lang;
 
-  // PII mask at storage boundary (default true)
-  const doMask = opts.maskPII !== false;
-  if (doMask && doc.text) {
-    doc.text = maskPII(doc.text);
-  }
+  // PII Policy: do not mask. Preserve text exactly as provided.
   log.info('ingestBuffer.complete', { adapter, filename: opts.filename, mime: opts.mime, bytes: buf.byteLength, pages: doc.pageMap?.length, warnings: (doc.warnings||[]).length, language: lang });
   return doc;
 }
@@ -146,10 +141,7 @@ export async function ingestBufferAsync(buf: Buffer, opts: IngestOptions = {}): 
 
   const lang = opts.languageHint || detectLanguage(doc.text || '');
   doc.language = lang;
-  const doMask = opts.maskPII !== false;
-  if (doMask && doc.text) {
-    doc.text = maskPII(doc.text);
-  }
+  // PII Policy: do not mask. Preserve text exactly as provided.
   log.info('ingestBufferAsync.complete', { adapter, filename: opts.filename, mime: opts.mime, bytes: buf.byteLength, pages: doc.pageMap?.length, warnings: (doc.warnings||[]).length, language: lang });
   return doc;
 }

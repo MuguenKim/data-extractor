@@ -24,10 +24,13 @@ function baselineExtract(doc, _opts = {}) {
         currency: { value: null, confidence: 0, spans: [] },
         total: { value: null, confidence: 0, spans: [] },
         table: { value: null, confidence: 0, spans: [] },
+        contact_phone: { value: null, confidence: 0, spans: [] },
+        contact_email: { value: null, confidence: 0, spans: [] },
     };
     // Heuristic: label-led invoice number
     const invLabelRe = /(invoice\s*(no\.?|#|number)\s*[:\-]?\s*)([A-Z0-9\-_/]{3,})/i;
-    const invFreeRe = /\b(?:inv|invoice)[-_/ ]?([A-Z0-9]{3,})\b/i;
+    // Free-form: ensure a separator exists to avoid matching plain "Invoice" header
+    const invFreeRe = /\b(?:invoice|inv)[-_/ ]+([A-Z0-9][A-Z0-9\-_/]{2,})\b/i;
     let m = text.match(invLabelRe);
     if (m) {
         fields.invoice_number.value = m[3];
@@ -50,6 +53,23 @@ function baselineExtract(doc, _opts = {}) {
         fields.date.value = m[2];
         fields.date.confidence = 0.9;
         fields.date.spans = findSpan(text, m[0]);
+    }
+    // Contact: phone (allow obfuscated '*') and email (allow obfuscated '*')
+    // Phone: permit digits, spaces, (), -, +, and '*'
+    const phoneRe = /(?<!\w)(?:\+?\d[\s\-()*]*)?(?:\(?\d{2,4}\)?[\s\-]*)?(?:[\d*][\s\-()]*){6,}(?!\w)/;
+    m = text.match(phoneRe);
+    if (m) {
+        fields.contact_phone.value = m[0].trim();
+        fields.contact_phone.confidence = /\*/.test(m[0]) ? 0.5 : 0.85;
+        fields.contact_phone.spans = findSpan(text, m[0]);
+    }
+    // Email: local part normal, domain may include '*' prior to TLD
+    const emailRe = /(?<![\w.+-])([\w.+-]+)@([A-Z0-9*.-]+)\.[A-Z]{2,}(?![\w.-])/i;
+    m = text.match(emailRe);
+    if (m) {
+        fields.contact_email.value = m[0];
+        fields.contact_email.confidence = /\*/.test(m[0]) ? 0.5 : 0.9;
+        fields.contact_email.spans = findSpan(text, m[0]);
     }
     else {
         m = text.match(dateAnyRe);

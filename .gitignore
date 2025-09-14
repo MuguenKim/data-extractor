@@ -7,3 +7,47 @@ pnpm-lock.yaml
 coverage
 *.log
 
+# Logs (explicit)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files (keep examples committed)
+.env*
+!.env.example
+
+# Build outputs
+build/
+lib/
+out/
+.next/
+.turbo/
+.cache/
+.parcel-cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# Lint/format caches
+.eslintcache
+
+# Editors/OS
+.vscode/
+.idea/
+Thumbs.db
+
+# Test/coverage caches
+.nyc_output/
+.jest-cache/
+.jest/
+.pytest_cache/
+
+# Python (for packages/clients-python and any scripts)
+.venv/
+venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+*.egg-info/
+

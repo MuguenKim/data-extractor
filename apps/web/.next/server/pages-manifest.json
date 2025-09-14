@@ -2,10 +2,10 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/jobs/[id]": "pages/jobs/[id].js",
-  "/projects": "pages/projects.js",
-  "/projects/[id]": "pages/projects/[id].js",
-  "/projects/[id]/ingest": "pages/projects/[id]/ingest.js",
   "/": "pages/index.js",
-  "/projects/[id]/results/[fileId]": "pages/projects/[id]/results/[fileId].js"
+  "/projects/[id]/results/[fileId]": "pages/projects/[id]/results/[fileId].js",
+  "/projects/[id]/ingest": "pages/projects/[id]/ingest.js",
+  "/workflows": "pages/workflows.js",
+  "/projects/[id]": "pages/projects/[id].js",
+  "/projects": "pages/projects.js"
 }
