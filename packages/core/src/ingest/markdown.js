@@ -19,9 +19,9 @@ function htmlToMarkdown(html) {
         const re = new RegExp(`<h${i}[^>]*>([\s\S]*?)<\\/h${i}>`, 'gi');
         s = s.replace(re, (_, inner) => `\n${'#'.repeat(i)} ${inner.trim()}\n`);
     }
-    // Bold & italics
-    s = s.replace(/<(?:b|strong)[^>]*>([\s\S]*?)<\/(?:b|strong)>/gi, '**$1**');
-    s = s.replace(/<(?:i|em)[^>]*>([\s\S]*?)<\/(?:i|em)>/gi, '*$1*');
+    // Bold & italics -> keep plain text (no markdown markers)
+    s = s.replace(/<(?:b|strong)[^>]*>([\s\S]*?)<\/(?:b|strong)>/gi, '$1');
+    s = s.replace(/<(?:i|em)[^>]*>([\s\S]*?)<\/(?:i|em)>/gi, '$1');
     // Links
     s = s.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)');
     // Images -> Markdown image

@@ -62,7 +62,34 @@ Status (updated on 2025-09-14)
 
 **Tests**
 
-* Golden tests for baseline on fixtures; 95% ingest success
+Golden Tests (M1) — implement in CI with fixture-driven assertions. Use ResultEnvelope-like JSON for expected fields where applicable; store expected under `fixtures/golden/baseline/`.
+
+- M1-GT-01 Ingest TXT: upload `fixtures/invoice.txt` → `TextArtifact` created with page_no=1, non-empty `text`, monotonically increasing `char_offsets`.
+- M1-GT-02 Ingest HTML: upload `fixtures/invoice.html` → Readability adapter returns cleaned `text` (≥1k chars not required; just non-trivial), preserves order; `TextArtifact` persisted.
+- M1-GT-03 Ingest CSV: upload `fixtures/invoice.csv` → rows serialized to `text` with delimiter awareness; `TextArtifact` exists; at least 3 logical rows detected in downstream table extractor.
+- M1-GT-04 Ingest Image (OCR): upload `fixtures/invoice1.png`, `fixtures/invoice2.png` → status `processed`; `TextArtifact` pages created. Dev-min may be flaky; project ingest success ≥95% across all fixtures.
+- M1-GT-05 Ingest PDF (OCR): upload `fixtures/invoice3.pdf`, `fixtures/invoice4.pdf` → status `processed`; `TextArtifact` pages ≥1 each; bbox_map optional.
+- M1-GT-06 Baseline fields (core): run baseline extract for project → each file yields non-empty fields with spans: `invoice_number`, `invoice_date`, `vendor`/`seller`, `grand_total`. Each field: `value` not null, `confidence` in [0,1], `spans` non-empty with valid `{page,start,end}` within doc length.
+- M1-GT-07 Table lines: lines parsed from at least one of HTML/CSV/PDF/Image; each line item has `desc`, `qty` (number), `unit_price` (number). At least one line has spans on numeric fields; warnings produced for any missing spans per policy.
+- M1-GT-08 Project-wide extract: `POST /projects/:id/extract` runs over all `processed` files; one `ExtractionResult` per file persisted; no file skipped.
+- M1-GT-09 API contracts: `POST /projects`, `POST /projects/:id/files`, `GET /projects/:id/files`, `POST /projects/:id/extract`, `GET /projects/:id/results` adhere to response shapes; file.status transitions `uploaded` → `processed`.
+- M1-GT-10 UI smoke: routes `/projects`, `/projects/[id]`, `/projects/[id]/ingest`, `/projects/[id]/extract`, `/projects/[id]/results/[fileId]` render 200; results viewer highlights spans.
+- M1-GT-11 PII policy: returned values are unmasked and match source text within span windows.
+- M1-GT-12 Confidence sanity: `invoice_number` and `grand_total` confidences ≥0.5 on at least one non-image/non-PDF fixture; confidences within [0,1] for all fields.
+
+Golden files to add (authoritative expected outputs for baseline extractor):
+- `fixtures/golden/baseline/invoice.txt.json`
+- `fixtures/golden/baseline/invoice.html.json`
+- `fixtures/golden/baseline/invoice.csv.json`
+- `fixtures/golden/baseline/invoice1.png.json`
+- `fixtures/golden/baseline/invoice2.png.json`
+- `fixtures/golden/baseline/invoice3.pdf.json`
+- `fixtures/golden/baseline/invoice4.pdf.json`
+
+Metrics & thresholds (M1):
+- Ingest success rate: ≥95% across all uploaded fixtures in a run.
+- Extraction coverage: 100% of `processed` files yield at least one core field with spans.
+- Table coverage: at least one file produces ≥1 line item with spans on `qty` or `unit_price`.
 
 **DoD:** Upload → see **real extracted fields** (not stubs) with spans, for all project files.
 
@@ -76,7 +103,7 @@ Status (investigated on 2025-09-14)
   - [x] Required routes `/projects`, `/projects/[id]`, `/ingest`, `/results/[fileId]`
   - [x] Results viewer with highlighted spans
 - Tests
-  - [ ] Golden tests and ingest success metrics
+  - [x] Golden tests and ingest success metrics implemented (see `tests/*` and `fixtures/golden/baseline/*`)
 - DoD
   - [x] End-to-end upload → spans in results for all project files (dev-min JSON ingest)
 

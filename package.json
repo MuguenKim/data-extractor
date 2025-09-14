@@ -12,7 +12,7 @@
     "compose:up": "docker compose -f infrastructure/docker-compose.yml up --build",
     "compose:down": "docker compose -f infrastructure/docker-compose.yml down -v",
     "lint": "echo 'lint placeholder'",
-    "test": "echo 'test placeholder'"
+    "test": "node tests/run.js"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

@@ -20,9 +20,9 @@ export function htmlToMarkdown(html: string): string {
     s = s.replace(re, (_, inner) => `\n${'#'.repeat(i)} ${inner.trim()}\n`);
   }
 
-  // Bold & italics
-  s = s.replace(/<(?:b|strong)[^>]*>([\s\S]*?)<\/(?:b|strong)>/gi, '**$1**');
-  s = s.replace(/<(?:i|em)[^>]*>([\s\S]*?)<\/(?:i|em)>/gi, '*$1*');
+  // Bold & italics -> keep plain text (no markdown markers to avoid breaking regex heuristics)
+  s = s.replace(/<(?:b|strong)[^>]*>([\s\S]*?)<\/(?:b|strong)>/gi, '$1');
+  s = s.replace(/<(?:i|em)[^>]*>([\s\S]*?)<\/(?:i|em)>/gi, '$1');
 
   // Links
   s = s.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)');
