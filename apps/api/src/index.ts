@@ -13,6 +13,7 @@ import {
   ingestBufferAsync,
   ingestFromText,
   ingestHTMLString,
+  getLogger,
 } from "@core";
 
 dotenv.config();
@@ -21,7 +22,13 @@ const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(cors());
 app.use(helmet());
+const logger = getLogger('api');
 app.use(morgan("dev"));
+app.use((req: any, _res: any, next: any) => {
+  // Attach a simple request id for correlation if provided or create one
+  req.req_id = req.headers['x-request-id'] || uuidv4();
+  next();
+});
 
 const API_PORT = Number(process.env.API_PORT ?? 3001);
 
@@ -56,6 +63,17 @@ function loadSchemaById(id: string): WorkflowSchema | null {
 
 // --- M1: Projects & Files ---
 
+// GET /projects -> list projects (dev-min)
+app.get("/projects", (_req: any, res: any) => {
+  const out = Array.from(projects.values()).map((p) => {
+    const fileIds = Array.from(projectFiles.get(p.id) ?? []);
+    const fileRecs = fileIds.map((fid) => files.get(fid)!).filter(Boolean);
+    const processed = fileRecs.filter((f) => f.status === "processed").length;
+    return { id: p.id, name: p.name, files_count: fileRecs.length, processed, created_at: p.created_at };
+  });
+  res.json(out);
+});
+
 // POST /projects -> {id}
 app.post("/projects", (req: any, res: any) => {
   const id = uuidv4();
@@ -63,6 +81,7 @@ app.post("/projects", (req: any, res: any) => {
   const rec: ProjectRec = { id, name, created_at: new Date().toISOString() };
   projects.set(id, rec);
   projectFiles.set(id, new Set());
+  logger.info('project.create', { project_id: id, name });
   res.json({ id });
 });
 
@@ -85,6 +104,7 @@ app.post("/projects/:id/files", async (req: any, res: any) => {
   const jobId = uuidv4();
   const job: JobRecord = { id: jobId, status: "processing" };
   jobs.set(jobId, job);
+  logger.info('ingest.job.start', { job_id: jobId, project_id: p.id });
   res.json({ job_id: jobId });
 
   // Process synchronously for dev
@@ -112,6 +132,7 @@ app.post("/projects/:id/files", async (req: any, res: any) => {
       fileRec.status = ta.length > 0 ? "processed" : "failed";
       files.set(fileId, fileRec);
       processedFileIds.push(fileId);
+      logger.info('ingest.file', { job_id: jobId, project_id: p.id, file_id: fileId, name, mime: 'text/html', adapter: 'html', pages: ta.length, warnings: (doc.warnings||[]).length });
     }
 
     // 2) Multi-file base64 ingestion: { files: [{ name, mime, data_base64 }] }
@@ -135,6 +156,7 @@ app.post("/projects/:id/files", async (req: any, res: any) => {
         fileRec.status = ta.length > 0 ? "processed" : "failed";
         files.set(fileId, fileRec);
         processedFileIds.push(fileId);
+        logger.info('ingest.file', { job_id: jobId, project_id: p.id, file_id: fileId, name, mime, adapter: doc.meta?.adapter, pages: ta.length, warnings: (doc.warnings||[]).length, language: (doc as any).language });
       }
     }
 
@@ -163,15 +185,18 @@ app.post("/projects/:id/files", async (req: any, res: any) => {
       fileRec.status = ta.length > 0 ? "processed" : "failed";
       files.set(fileId, fileRec);
       processedFileIds.push(fileId);
+      logger.info('ingest.file', { job_id: jobId, project_id: p.id, file_id: fileId, name, mime, adapter: Array.isArray(body.pages) ? 'json.pages' : 'json.text', pages: ta.length });
     }
 
     job.status = "done";
     job.result = { file_ids: processedFileIds, count: processedFileIds.length };
     jobs.set(jobId, job);
+    logger.info('ingest.job.done', { job_id: jobId, project_id: p.id, files: processedFileIds.length });
   } catch (e: any) {
     job.status = "failed";
     job.error = e?.message ?? String(e);
     jobs.set(jobId, job);
+    logger.error('ingest.job.error', { job_id: jobId, project_id: req.params.id, error: job.error });
   }
 });
 
@@ -216,12 +241,14 @@ app.post("/projects/:id/extract", async (req: any, res: any) => {
   const job: JobRecord = { id: jobId, status: "processing" };
   jobs.set(jobId, job);
   res.json({ job_id: jobId, total: ready.length });
+  logger.info('extract.job.start', { job_id: jobId, project_id: p.id, files: ready.length });
 
   try {
     const schema = (invoiceSchemaV1 as any) as WorkflowSchema;
     for (const f of ready) {
       const pages = textArtifacts.get(f.id) ?? [];
       const fullText = pages.map((pg) => pg.text).join("\n\n");
+      logger.debug('extract.file.start', { job_id: jobId, project_id: p.id, file_id: f.id, pages: pages.length, chars: fullText.length });
       const result = await extract_with_langextract({ schema, text: fullText, backend: "mock" });
       const envelope: any = {
         schema_id: schema.id || "invoice.v1",
@@ -229,13 +256,17 @@ app.post("/projects/:id/extract", async (req: any, res: any) => {
         ...result,
       };
       extractionResults.set(f.id, envelope);
+      const stats: any = envelope.stats || {};
+      logger.info('extract.file.done', { job_id: jobId, project_id: p.id, file_id: f.id, backend: stats.backend, model: stats.model, critical_confidence: stats.critical_confidence, warnings: envelope.warnings?.length });
     }
     job.status = "done";
     jobs.set(jobId, job);
+    logger.info('extract.job.done', { job_id: jobId, project_id: p.id });
   } catch (e: any) {
     job.status = "failed";
     job.error = e?.message ?? String(e);
     jobs.set(jobId, job);
+    logger.error('extract.job.error', { job_id: jobId, project_id: p.id, error: job.error });
   }
 });
 
@@ -291,8 +322,10 @@ app.post("/workflows", (req: any, res: any) => {
       lang_hint,
     };
     workflows.set(wfId, wf);
+    logger.info('workflow.create', { workflow_id: wfId, backend: wf.backend, schema_id: schema.id, ocr_policy: wf.ocr_policy, lang_hint: wf.lang_hint });
     return res.json(wf);
   } catch (e: any) {
+    logger.error('workflow.error', { error: e.message });
     return res.status(500).json({ error: e.message });
   }
 });
@@ -313,6 +346,7 @@ app.post("/extract", async (req: any, res: any) => {
   res.json({ job_id: jobId });
 
   try {
+    logger.info('ad_hoc_extract.start', { job_id: jobId, workflow_id, backend: wf.backend, schema_id: wf.schema.id, chars: text.length });
     const result = await extract_with_langextract({
       schema: wf.schema,
       text,
@@ -321,10 +355,13 @@ app.post("/extract", async (req: any, res: any) => {
     job.status = "done";
     job.result = result;
     jobs.set(jobId, job);
+    const stats: any = (result as any).stats || {};
+    logger.info('ad_hoc_extract.done', { job_id: jobId, workflow_id, backend: stats.backend, model: stats.model, critical_confidence: stats.critical_confidence, warnings: result.warnings?.length });
   } catch (e: any) {
     job.status = "failed";
     job.error = e?.message ?? String(e);
     jobs.set(jobId, job);
+    logger.error('ad_hoc_extract.error', { job_id: jobId, workflow_id, error: job.error });
   }
 });
 
@@ -352,5 +389,5 @@ app.get("/health", (_req: any, res: any) => res.json({ ok: true }));
 
 app.listen(API_PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`API listening on :${API_PORT}`);
+  logger.info('api.listen', { port: API_PORT });
 });

@@ -132,9 +132,9 @@ Status (investigated on 2025-09-14)
   - [x] Model router with backends: mock/groq/ollama (network backends stubbed)
   - [x] Workflows create/bind (`POST /workflows` in API)
   - [x] Extraction endpoint (`POST /extract?workflow_id=...`)
-  - [ ] Groq/Ollama calls implemented (currently placeholders that throw)
+  - [ ] Groq/Ollama calls 
 - Frontend
-  - [ ] `/projects/[id]/format` route not present (demo page `/workflows` exists)
+  - [ ] `/projects/[id]/format` implemented
   - [x] Job page allows JSON download of result
 - Tests
   - [ ] Contract tests for spans coverage

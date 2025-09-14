@@ -3,6 +3,7 @@ import { ingestPlainText } from './text';
 import { ingestCSV } from './csv';
 import { ingestPlaceholder } from './placeholders';
 import { DocumentText, IngestOptions } from './types';
+import { getLogger } from '../logger';
 import { maskPII } from '../pii';
 import { detectLanguage } from '../lang';
 import { ingestEML, ingestMSG, ingestMHTML } from './email';
@@ -31,11 +32,15 @@ export function guessAdapter(filename?: string, mime?: string): string {
 }
 
 export function ingestFromText(text: string, opts: IngestOptions = {}): DocumentText {
+  const log = getLogger('core').child({});
   const pageMap = [{ page: 1, start: 0, end: text.length }];
-  return { text, pageMap, warnings: [], meta: { adapter: 'text', mime: opts.mime, filename: opts.filename, bytes: Buffer.byteLength(text) } };
+  const doc = { text, pageMap, warnings: [], meta: { adapter: 'text', mime: opts.mime, filename: opts.filename, bytes: Buffer.byteLength(text) } } as DocumentText;
+  log.debug('ingestFromText', { adapter: 'text', filename: opts.filename, mime: opts.mime, bytes: doc.meta?.bytes, pages: pageMap.length });
+  return doc;
 }
 
 export function ingestBuffer(buf: Buffer, opts: IngestOptions = {}): DocumentText {
+  const log = getLogger('core').child({});
   const adapter = guessAdapter(opts.filename, opts.mime);
   let doc: DocumentText;
   switch (adapter) {
@@ -89,12 +94,13 @@ export function ingestBuffer(buf: Buffer, opts: IngestOptions = {}): DocumentTex
   if (doMask && doc.text) {
     doc.text = maskPII(doc.text);
   }
-
+  log.info('ingestBuffer.complete', { adapter, filename: opts.filename, mime: opts.mime, bytes: buf.byteLength, pages: doc.pageMap?.length, warnings: (doc.warnings||[]).length, language: lang });
   return doc;
 }
 
 // Async variant for adapters that require async libs (pdfjs, mammoth, unzipper)
 export async function ingestBufferAsync(buf: Buffer, opts: IngestOptions = {}): Promise<DocumentText> {
+  const log = getLogger('core').child({});
   const adapter = guessAdapter(opts.filename, opts.mime);
   let doc: DocumentText;
   switch (adapter) {
@@ -144,6 +150,7 @@ export async function ingestBufferAsync(buf: Buffer, opts: IngestOptions = {}): 
   if (doMask && doc.text) {
     doc.text = maskPII(doc.text);
   }
+  log.info('ingestBufferAsync.complete', { adapter, filename: opts.filename, mime: opts.mime, bytes: buf.byteLength, pages: doc.pageMap?.length, warnings: (doc.warnings||[]).length, language: lang });
   return doc;
 }
 

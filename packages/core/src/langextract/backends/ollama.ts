@@ -1,5 +1,6 @@
 import { ResultEnvelope, WorkflowSchema, ExtractionChunk } from "../../types";
 import { extractLocal } from "../local";
+import { getLogger } from "../../logger";
 
 interface CallArgs {
   schema: WorkflowSchema;
@@ -10,7 +11,11 @@ interface CallArgs {
 
 export async function callOllamaLangExtract({ schema, chunk, model, host }: CallArgs): Promise<ResultEnvelope> {
   // If no host, fall back to local extractor for dev-min
-  if (!host) return extractLocal(schema, chunk);
+  const log = getLogger('core').child({});
+  if (!host) {
+    log.warn('backend.ollama.no_host_fallback', { chunk_id: chunk.id, model });
+    return extractLocal(schema, chunk);
+  }
 
   const systemPrompt = buildSystemPrompt();
   const userPrompt = buildUserPrompt(schema, chunk);
@@ -29,12 +34,14 @@ export async function callOllamaLangExtract({ schema, chunk, model, host }: Call
       }),
     });
     if (!resp.ok) {
+      log.warn('backend.ollama.http_error_fallback', { status: resp.status, chunk_id: chunk.id, model });
       return extractLocal(schema, chunk);
     }
     const data = await resp.json();
     const content = data?.response ?? "";
     return normalizeModelOutput(content, schema, chunk);
-  } catch {
+  } catch (e: any) {
+    log.warn('backend.ollama.exception_fallback', { error: e?.message || String(e), chunk_id: chunk.id, model });
     return extractLocal(schema, chunk);
   }
 }
@@ -62,7 +69,7 @@ function buildUserPrompt(schema: WorkflowSchema, chunk: ExtractionChunk): string
   ].join("\n\n");
 }
 
-function normalizeModelOutput(raw: string, schema: WorkflowSchema, chunk: ExtractionChunk): ResultEnvelope {
+async function normalizeModelOutput(raw: string, schema: WorkflowSchema, chunk: ExtractionChunk): Promise<ResultEnvelope> {
   let parsed: any = null;
   try {
     parsed = JSON.parse(raw);

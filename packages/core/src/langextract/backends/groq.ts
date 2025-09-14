@@ -1,5 +1,6 @@
 import { ResultEnvelope, WorkflowSchema, ExtractionChunk } from "../../types";
 import { extractLocal } from "../local";
+import { getLogger } from "../../logger";
 
 interface CallArgs {
   schema: WorkflowSchema;
@@ -10,7 +11,9 @@ interface CallArgs {
 
 export async function callGroqLangExtract({ schema, chunk, model, apiKey }: CallArgs): Promise<ResultEnvelope> {
   // If no API key, fall back to local extractor to keep dev-min functional.
+  const log = getLogger('core').child({});
   if (!apiKey) {
+    log.warn('backend.groq.no_api_key_fallback', { chunk_id: chunk.id, model });
     return extractLocal(schema, chunk);
   }
 
@@ -36,14 +39,16 @@ export async function callGroqLangExtract({ schema, chunk, model, apiKey }: Call
     });
 
     if (!resp.ok) {
+      log.warn('backend.groq.http_error_fallback', { status: resp.status, chunk_id: chunk.id, model });
       // Network reachable but API rejected; fall back to local
       return extractLocal(schema, chunk);
     }
     const data = await resp.json();
     const content = data?.choices?.[0]?.message?.content ?? "";
     return normalizeModelOutput(content, schema, chunk);
-  } catch {
+  } catch (e: any) {
     // Network not available or other error; fall back
+    log.warn('backend.groq.exception_fallback', { error: e?.message || String(e), chunk_id: chunk.id, model });
     return extractLocal(schema, chunk);
   }
 }
@@ -72,7 +77,7 @@ function buildUserPrompt(schema: WorkflowSchema, chunk: ExtractionChunk): string
   ].join("\n\n");
 }
 
-function normalizeModelOutput(raw: string, schema: WorkflowSchema, chunk: ExtractionChunk): ResultEnvelope {
+async function normalizeModelOutput(raw: string, schema: WorkflowSchema, chunk: ExtractionChunk): Promise<ResultEnvelope> {
   let parsed: any = null;
   try {
     parsed = JSON.parse(raw);
