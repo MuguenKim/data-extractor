@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Layout from "../components/Layout";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -27,34 +28,36 @@ export default function Workflows() {
   useEffect(() => { load(); }, []);
 
   return (
-    <main style={{ padding: 24, fontFamily: 'sans-serif' }}>
-      <h1>Workflows</h1>
-      {loading && <p>Loading…</p>}
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <table style={{ borderCollapse: 'collapse', width: '100%', marginTop: 12 }}>
-        <thead>
-          <tr>
-            <th align="left">ID</th>
-            <th align="left">Backend</th>
-            <th align="left">Schema</th>
-            <th align="left">Projects</th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.map((w) => (
-            <tr key={w.id}>
-              <td style={{ borderBottom: '1px solid #eee', padding: '6px 4px' }}><code>{w.id}</code></td>
-              <td style={{ borderBottom: '1px solid #eee', padding: '6px 4px' }}>{w.backend}</td>
-              <td style={{ borderBottom: '1px solid #eee', padding: '6px 4px' }}><code>{w.schema?.id}</code></td>
-              <td style={{ borderBottom: '1px solid #eee', padding: '6px 4px' }}>{w.project_ids?.length ? w.project_ids.join(', ') : '—'}</td>
+    <Layout>
+      <h1 className="page-title">Workflows</h1>
+      {loading && <div className="badge">Loading…</div>}
+      {error && <div className="badge" style={{ color: 'var(--danger)' }}>{error}</div>}
+      <div className="card card-pad">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Backend</th>
+              <th>Schema</th>
+              <th>Projects</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <div style={{ marginTop: 12 }}>
-        <button onClick={load}>Refresh</button>
+          </thead>
+          <tbody>
+            {list.map((w) => (
+              <tr key={w.id}>
+                <td><code>{w.id}</code></td>
+                <td>{w.backend}</td>
+                <td><code>{w.schema?.id}</code></td>
+                <td>{w.project_ids?.length ? w.project_ids.join(', ') : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ marginTop: 12 }}>
+          <button className="btn btn-secondary" onClick={load}>Refresh</button>
+        </div>
       </div>
-    </main>
+    </Layout>
   );
 }
 

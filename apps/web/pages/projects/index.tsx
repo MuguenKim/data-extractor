@@ -1,5 +1,6 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
+import Layout from '../../components/Layout';
 
 export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
@@ -38,28 +39,32 @@ export default function ProjectsPage() {
   }, []);
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Projects</h1>
-      <p>Create a new project to group similar documents.</p>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Project Name" />
-        <button onClick={createProject} disabled={creating}>{creating ? 'Creating...' : 'Create Project'}</button>
+    <Layout>
+      <h1 className="page-title">Projects</h1>
+      <div className="page-sub">Create a project to group related documents.</div>
+
+      <div className="card card-pad" style={{ marginBottom: 16 }}>
+        <div className="row" style={{ alignItems: 'center' }}>
+          <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Project name" />
+          <button className="btn btn-primary" onClick={createProject} disabled={creating}>{creating ? 'Creating…' : 'Create Project'}</button>
+        </div>
       </div>
-      <div style={{ marginTop: 16 }}>
-        <h3>All Projects</h3>
+
+      <div className="card card-pad">
+        <div className="section-title">All Projects</div>
         {loading ? (
-          <div>Loading...</div>
+          <div className="badge">Loading…</div>
         ) : projects.length === 0 ? (
-          <div>No projects yet.</div>
+          <div className="page-sub">No projects yet.</div>
         ) : (
-          <table cellPadding={6} style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table className="table">
             <thead>
               <tr>
-                <th align="left">Name</th>
-                <th align="left">Files</th>
-                <th align="left">Processed</th>
-                <th align="left">Created</th>
-                <th align="left">Actions</th>
+                <th>Name</th>
+                <th>Files</th>
+                <th>Processed</th>
+                <th>Created</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -78,6 +83,6 @@ export default function ProjectsPage() {
           </table>
         )}
       </div>
-    </div>
+    </Layout>
   );
 }

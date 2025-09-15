@@ -1,5 +1,6 @@
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
+import Layout from '../../../../components/Layout';
 
 function highlight(text: string, spans: { start: number; end: number }[]) {
   if (!spans || spans.length === 0) return [text];
@@ -58,17 +59,17 @@ export default function ResultViewer() {
   }, [env]);
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Extraction Result</h1>
+    <Layout>
+      <h1 className="page-title">Extraction Result</h1>
       {err && (
-        <div style={{ marginBottom: 12, color: '#a00' }}>{err}</div>
+        <div className="badge" style={{ marginBottom: 12, color: 'var(--danger)' }}>{err}</div>
       )}
       {env ? (
-        <div style={{ display: 'flex', gap: 16 }}>
-          <div style={{ flex: '0 0 360px' }}>
-            <h3>Fields</h3>
-            <table cellPadding={4} style={{ borderCollapse: 'collapse' }}>
-              <thead><tr><th align="left">Name</th><th align="left">Value</th><th>Conf</th></tr></thead>
+        <div className="row">
+          <div className="card card-pad" style={{ flex: '0 0 420px' }}>
+            <div className="section-title">Fields</div>
+            <table className="table">
+              <thead><tr><th>Name</th><th>Value</th><th>Conf</th></tr></thead>
               <tbody>
                 {Object.keys(env.fields || {}).map((k) => {
                   const fr = env.fields[k];
@@ -83,7 +84,7 @@ export default function ResultViewer() {
               </tbody>
             </table>
             <div style={{ marginTop: 8 }}>
-              <button onClick={() => {
+              <button className="btn btn-secondary" onClick={() => {
                 const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -94,21 +95,21 @@ export default function ResultViewer() {
               }}>Download JSON</button>
             </div>
             {env.warnings && env.warnings.length > 0 && (
-              <div style={{ marginTop: 8, color: '#a67c00' }}>
+              <div style={{ marginTop: 8, color: 'var(--warn)' }}>
                 Warnings: {env.warnings.join(', ')}
               </div>
             )}
           </div>
-          <div style={{ flex: 1 }}>
-            <h3>Document Text</h3>
-            <div style={{ whiteSpace: 'pre-wrap', border: '1px solid #ddd', padding: 12, borderRadius: 4, maxHeight: 600, overflow: 'auto' }}>
+          <div className="card card-pad" style={{ flex: 1 }}>
+            <div className="section-title">Document Text</div>
+            <div className="scroll mono">
               {textData ? highlight(textData, allSpans) : 'Loading text...'}
             </div>
           </div>
         </div>
       ) : (
-        <div>Loading...</div>
+        <div className="badge">Loading…</div>
       )}
-    </div>
+    </Layout>
   );
 }

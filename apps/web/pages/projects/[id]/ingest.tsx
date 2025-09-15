@@ -1,5 +1,6 @@
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
+import Layout from '../../../components/Layout';
 
 interface FileRec { id: string; name: string; status: string; pages: number; mime: string }
 
@@ -138,94 +139,76 @@ export default function IngestPage() {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Ingest Files</h1>
+    <Layout>
+      <h1 className="page-title">Ingest Files</h1>
 
-      <div style={{ marginBottom: 12 }}>
-        <strong>Choose Upload Method:&nbsp;</strong>
-        <label style={{ marginRight: 12 }}>
-          <input type="radio" name="mode" checked={mode==='text'} onChange={() => setMode('text')} /> Text
-        </label>
-        <label style={{ marginRight: 12 }}>
-          <input type="radio" name="mode" checked={mode==='files'} onChange={() => setMode('files')} /> File(s)
-        </label>
-        <label>
-          <input type="radio" name="mode" checked={mode==='url'} onChange={() => setMode('url')} /> URL
-        </label>
-      </div>
-
-      {/* Uploader area */}
-      <div style={{ border: '1px solid #ddd', borderRadius: 6, padding: 12, marginBottom: 16 }}>
+      <div className="card card-pad" style={{ marginBottom: 16 }}>
+        <div className="row" style={{ alignItems: 'center' }}>
+          <div className="badge">Upload Method</div>
+          <label><input type="radio" name="mode" checked={mode==='text'} onChange={() => setMode('text')} /> Text</label>
+          <label><input type="radio" name="mode" checked={mode==='files'} onChange={() => setMode('files')} /> File(s)</label>
+          <label><input type="radio" name="mode" checked={mode==='url'} onChange={() => setMode('url')} /> URL</label>
+        </div>
+        <div style={{ height: 8 }} />
         {mode === 'text' && (
-          <div>
-            <div>
-              <label>Filename:&nbsp;</label>
-              <input value={name} onChange={e => setName(e.target.value)} />
-            </div>
-            <div style={{ marginTop: 8 }}>
-              <label>Text content:</label>
-              <textarea value={text} onChange={e => setText(e.target.value)} rows={8} style={{ width: '100%' }} />
-            </div>
-            <button onClick={submitText} disabled={submitting || !id}>{submitting ? 'Uploading...' : 'Upload Text'}</button>
+          <div className="grid" style={{ gridTemplateColumns: '240px 1fr auto', alignItems: 'center' }}>
+            <input className="input" placeholder="Filename e.g. sample.txt" value={name} onChange={e => setName(e.target.value)} />
+            <textarea className="textarea" value={text} onChange={e => setText(e.target.value)} rows={8} />
+            <button className="btn btn-primary" onClick={submitText} disabled={submitting || !id}>{submitting ? 'Uploading…' : 'Upload Text'}</button>
           </div>
         )}
 
         {mode === 'files' && (
-          <div>
-            <input type="file" multiple onChange={e => setLocalFiles(Array.from(e.target.files || []))} />
-            <div style={{ marginTop: 8 }}>
-              <button onClick={submitFiles} disabled={submitting || !id || localFiles.length === 0}>{submitting ? 'Uploading...' : `Upload ${localFiles.length || ''} File(s)`}</button>
-            </div>
+          <div className="row">
+            <input className="input" type="file" multiple onChange={e => setLocalFiles(Array.from(e.target.files || []))} />
+            <button className="btn btn-primary" onClick={submitFiles} disabled={submitting || !id || localFiles.length === 0}>{submitting ? 'Uploading…' : `Upload ${localFiles.length || ''} File(s)`}</button>
           </div>
         )}
 
         {mode === 'url' && (
-          <div>
-            <input placeholder="https://example.com/page" value={url} onChange={e => setUrl(e.target.value)} style={{ width: '100%' }} />
-            <div style={{ marginTop: 8 }}>
-              <button onClick={submitUrl} disabled={submitting || !id || !url.trim()}>{submitting ? 'Fetching...' : 'Ingest URL'}</button>
-            </div>
+          <div className="row">
+            <input className="input" placeholder="https://example.com/page" value={url} onChange={e => setUrl(e.target.value)} />
+            <button className="btn btn-primary" onClick={submitUrl} disabled={submitting || !id || !url.trim()}>{submitting ? 'Fetching…' : 'Ingest URL'}</button>
           </div>
         )}
-        {jobId && <div style={{ marginTop: 8 }}>Job: {jobId} (processing)</div>}
+        {jobId && <div style={{ marginTop: 8 }} className="badge">Job: {jobId} (processing)</div>}
       </div>
 
-      {/* Two-panel area: left list, right preview */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 16, alignItems: 'stretch' }}>
-        <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, overflow: 'auto' }}>
-          <h3 style={{ marginTop: 0 }}>Files</h3>
-          <table cellPadding={6} style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={{textAlign:'left'}}>Name</th><th>Status</th><th>Pages</th><th>Action</th></tr></thead>
+      <div className="split">
+        <div className="card card-pad">
+          <div className="section-title">Files</div>
+          <table className="table">
+            <thead><tr><th>Name</th><th>Status</th><th>Pages</th><th>Action</th></tr></thead>
             <tbody>
               {files.map(f => (
-                <tr key={f.id} style={{ background: selectedFileId===f.id ? '#f7faff' : undefined }}>
+                <tr key={f.id} style={{ background: selectedFileId===f.id ? '#f8fbff' : undefined }}>
                   <td style={{ wordBreak: 'break-all' }}>{f.name}</td>
-                  <td>{f.status}</td>
+                  <td className={f.status==='processed' ? 'status-ok' : ''}>{f.status}</td>
                   <td>{f.pages}</td>
                   <td>
-                    <button onClick={() => previewFile(f.id)}>Preview Parsed</button>
+                    <button className="btn btn-secondary" onClick={() => previewFile(f.id)}>Preview</button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div style={{ border: '1px solid #eee', borderRadius: 6, padding: 12, display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ marginTop: 0 }}>Parsed Preview</h3>
-          {!selectedFileId && <div style={{ color: '#666' }}>Select a file to preview parsed text.</div>}
+        <div className="card card-pad" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="section-title">Parsed Preview</div>
+          {!selectedFileId && <div className="page-sub">Select a file to preview parsed text.</div>}
           {selectedFileId && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <div style={{ marginBottom: 8, color: '#666' }}>File ID: {selectedFileId}</div>
-              <div style={{ flex: 1, minHeight: 300, border: '1px solid #ddd', borderRadius: 4, background: '#fafafa', padding: 8, overflow: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
+              <div className="page-sub">File ID: <code>{selectedFileId}</code></div>
+              <div className="scroll mono" style={{ flex: 1, minHeight: 300 }}>
                 {previewLoading ? 'Loading…' : previewText}
               </div>
               <div style={{ marginTop: 8 }}>
-                <a href={`/projects/${id}/results/${selectedFileId}`} target="_blank" rel="noreferrer">Open Structured Result page</a>
+                <a className="btn btn-secondary" href={`/projects/${id}/results/${selectedFileId}`} target="_blank" rel="noreferrer">Open Result Page</a>
               </div>
             </div>
           )}
         </div>
       </div>
-    </div>
+    </Layout>
   );
 }

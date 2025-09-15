@@ -1,5 +1,6 @@
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
+import Layout from '../../../components/Layout';
 
 interface FileSummary { file_id: string; status: string }
 
@@ -64,11 +65,12 @@ export default function ExtractPage() {
       const res = await fetch(`http://localhost:3001/projects/${id}/extract`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) {
-        if (data?.error === 'workflow_required') {
+        const err = data?.error || `HTTP ${res.status}`;
+        if (String(err).includes('workflow_required') || String(err).includes('format_required')) {
           router.push(`/projects/${id}/format`);
           return;
         }
-        setError(data?.error || `HTTP ${res.status}`);
+        setError(err);
         setRunning(false);
         return;
       }
@@ -149,33 +151,32 @@ export default function ExtractPage() {
   }, [env]);
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Structured Extraction</h1>
-      <p>Run extraction across all processed files and review structured results alongside the source text.</p>
-      <div style={{ marginTop: 8 }}>
-        <button onClick={startExtraction} disabled={running}>{running ? 'Running…' : 'Run Extraction'}</button>
-        {error && <span style={{ color: 'red', marginLeft: 12 }}>{error}</span>}
+    <Layout>
+      <h1 className="page-title">Structured Extraction</h1>
+      <div className="page-sub">Run extraction across all processed files and review results alongside the source text.</div>
+      <div className="row" style={{ marginBottom: 12 }}>
+        <button className="btn btn-primary" onClick={startExtraction} disabled={running}>{running ? 'Running…' : 'Run Extraction'}</button>
+        {error && <span className="badge" style={{ color: 'var(--danger)' }}>{error}</span>}
       </div>
-      <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
-        <div style={{ flex: '0 0 300px' }}>
-          <h3>Files</h3>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      <div className="row">
+        <div className="card card-pad" style={{ flex: '0 0 300px' }}>
+          <div className="section-title">Files</div>
+          <ul className="list-reset">
             {(Array.isArray(summaries) ? summaries : []).map((s) => (
-              <li key={s.file_id} style={{ padding: '6px 4px', borderBottom: '1px solid #eee', cursor: 'pointer', background: selectedFileId === s.file_id ? '#f6f8fa' : 'transparent' }}
-                  onClick={() => setSelectedFileId(s.file_id)}>
-                <div style={{ fontFamily: 'monospace' }}>{s.file_id.slice(0, 8)}…</div>
-                <div style={{ fontSize: 12, color: s.status === 'ok' ? 'green' : '#555' }}>status: {s.status}</div>
+              <li key={s.file_id} className={`file-item ${selectedFileId === s.file_id ? 'active' : ''}`} onClick={() => setSelectedFileId(s.file_id)}>
+                <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>{s.file_id.slice(0, 8)}…</div>
+                <div className={s.status === 'ok' ? 'status-ok' : 'status-warn'}>{s.status}</div>
               </li>
             ))}
           </ul>
         </div>
-        <div style={{ flex: 1 }}>
+        <div className="card card-pad" style={{ flex: 1 }}>
           {env ? (
-            <div style={{ display: 'flex', gap: 16 }}>
-              <div style={{ flex: '0 0 380px' }}>
-                <h3>Fields</h3>
-                <table cellPadding={4} style={{ borderCollapse: 'collapse' }}>
-                  <thead><tr><th align="left">Name</th><th align="left">Value</th><th>Conf</th></tr></thead>
+            <div className="row">
+              <div style={{ flex: '0 0 420px' }}>
+                <div className="section-title">Fields</div>
+                <table className="table">
+                  <thead><tr><th>Name</th><th>Value</th><th>Conf</th></tr></thead>
                   <tbody>
                     {Object.keys(env.fields || {}).map((k) => {
                       const fr = env.fields[k];
@@ -190,7 +191,7 @@ export default function ExtractPage() {
                   </tbody>
                 </table>
                 <div style={{ marginTop: 8 }}>
-                  <button onClick={() => {
+                  <button className="btn btn-secondary" onClick={() => {
                     const blob = new Blob([JSON.stringify(env, null, 2)], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -201,25 +202,25 @@ export default function ExtractPage() {
                   }}>Download JSON</button>
                 </div>
                 {env.warnings && env.warnings.length > 0 && (
-                  <div style={{ marginTop: 8, color: '#a67c00' }}>
+                  <div style={{ marginTop: 8, color: 'var(--warn)' }}>
                     Warnings: {env.warnings.join(', ')}
                   </div>
                 )}
               </div>
               <div style={{ flex: 1 }}>
-                <h3>Document Text</h3>
-                <div style={{ whiteSpace: 'pre-wrap', border: '1px solid #ddd', padding: 12, borderRadius: 4, maxHeight: 600, overflow: 'auto' }}>
+                <div className="section-title">Document Text</div>
+                <div className="scroll mono">
                   {docText ? highlight(docText, allSpans) : 'Loading text...'}
                 </div>
               </div>
             </div>
           ) : (
-            <div style={{ color: '#555' }}>
+            <div className="page-sub">
               {selectedFileId ? 'Loading result…' : 'Select a file to view the extracted data.'}
             </div>
           )}
         </div>
       </div>
-    </div>
+    </Layout>
   );
 }
