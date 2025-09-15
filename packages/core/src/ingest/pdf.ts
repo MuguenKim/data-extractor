@@ -23,7 +23,10 @@ export async function ingestPDFAsync(buf: Buffer, opts: IngestOptions): Promise<
   if (!getDocument) {
     return ingestPDF(buf, opts);
   }
-  const loadingTask = getDocument({ data: buf });
+  const data = (typeof Buffer !== 'undefined' && Buffer.isBuffer(buf))
+    ? new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+    : (buf instanceof Uint8Array ? buf : new Uint8Array(buf));
+  const loadingTask = getDocument({ data });
   const doc = await loadingTask.promise;
   const numPages = doc.numPages || 1;
   let text = '';

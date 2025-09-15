@@ -22,6 +22,9 @@ export async function ingestImageAsync(buf: Buffer, opts: IngestOptions): Promis
     base.warnings = (base.warnings || []).concat(`OCR disabled: tesseract.js not found (${e?.message || 'module_resolve_failed'})`);
     return base;
   }
+  const binary = (typeof Buffer !== 'undefined' && Buffer.isBuffer(buf))
+    ? new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength)
+    : (buf instanceof Uint8Array ? buf : new Uint8Array(buf));
   const langMap: Record<string, string> = { english: 'eng', french: 'fra', german: 'deu', spanish: 'spa', italian: 'ita', arabic: 'ara', russian: 'rus' };
   const hinted = (opts.languageHint || '').toLowerCase();
   const lang = process.env.OCR_LANG || (langMap[hinted] || hinted) || 'eng';
@@ -37,14 +40,14 @@ export async function ingestImageAsync(buf: Buffer, opts: IngestOptions): Promis
           langPath: langPath || undefined,
           gzip: true,
         } as any);
-        const result = await worker.recognize(buf);
+        const result = await worker.recognize(binary);
         data = result?.data;
         await worker.terminate();
       } else {
         throw new Error('no_worker');
       }
     } catch (_e) {
-      const result = await (Tesseract as any).recognize(buf, lang, { langPath: langPath || undefined });
+      const result = await (Tesseract as any).recognize(binary, lang, { langPath: langPath || undefined });
       data = result?.data;
     }
     const fullText: string = (data?.text || '').replace(/\r\n/g, '\n');
