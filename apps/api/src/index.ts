@@ -3,6 +3,8 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
+import path from "path";
+import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import {
   extract_with_langextract,
@@ -16,14 +18,24 @@ import {
   getLogger,
 } from "@core";
 
-dotenv.config();
+// Load env from repo root first, then allow app-local overrides
+(() => {
+  try {
+    const rootEnv = path.resolve(__dirname, '../../../.env');
+    if (fs.existsSync(rootEnv)) dotenv.config({ path: rootEnv });
+  } catch (_) { /* ignore */ }
+  dotenv.config();
+})();
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use(cors());
 app.use(helmet());
 const logger = getLogger('api');
-app.use(morgan("dev"));
+// Reduce log noise from tight polling (e.g., /jobs) and successful 2xx/3xx responses
+app.use(morgan("dev", {
+  skip: (req: any, res: any) => req.path.startsWith('/jobs') || res.statusCode < 400
+}));
 app.use((req: any, _res: any, next: any) => {
   // Attach a simple request id for correlation if provided or create one
   req.req_id = req.headers['x-request-id'] || uuidv4();
@@ -239,6 +251,8 @@ app.post("/projects/:id/extract", async (req: any, res: any) => {
   const ids = Array.from(projectFiles.get(p.id) ?? []);
   const ready = ids.map((fid) => files.get(fid)!).filter((f) => f && f.status === "processed");
 
+  let jobId: string | null = null;
+  let job: JobRecord | null = null;
   try {
     const wfIdQuery = String(req.query.workflow_id || "");
     let wfToUse: WorkflowConfig | null = null;
@@ -257,8 +271,8 @@ app.post("/projects/:id/extract", async (req: any, res: any) => {
     const useSchema: WorkflowSchema = wfToUse.schema;
     const backend = wfToUse.backend ?? (process.env.DEFAULT_BACKEND as any) ?? "groq";
 
-    const jobId = uuidv4();
-    const job: JobRecord = { id: jobId, status: "processing" };
+    jobId = uuidv4();
+    job = { id: jobId, status: "processing" };
     jobs.set(jobId, job);
     res.json({ job_id: jobId, total: ready.length });
     logger.info('extract.job.start', { job_id: jobId, project_id: p.id, files: ready.length, workflow_id: wfToUse.id, backend, schema_id: (useSchema as any)?.id });
@@ -277,12 +291,20 @@ app.post("/projects/:id/extract", async (req: any, res: any) => {
       const stats: any = envelope.stats || {};
       logger.info('extract.file.done', { job_id: jobId, project_id: p.id, file_id: f.id, backend: stats.backend, model: stats.model, critical_confidence: stats.critical_confidence, warnings: envelope.warnings?.length });
     }
-    job.status = "done";
-    jobs.set(jobId, job);
+    job!.status = "done";
+    jobs.set(jobId!, job!);
     logger.info('extract.job.done', { job_id: jobId, project_id: p.id });
   } catch (e: any) {
     const errMsg = e?.message ?? String(e);
     logger.error('extract.job.error', { project_id: p.id, error: errMsg });
+    // If a job was created and response was sent, just mark job failed
+    if (job && jobId) {
+      job.status = "failed";
+      job.error = errMsg;
+      jobs.set(jobId, job);
+      return; // response already sent earlier
+    }
+    // Otherwise, we haven't responded yet; send error
     return res.status(500).json({ error: errMsg });
   }
 });

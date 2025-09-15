@@ -38,12 +38,12 @@ export default function ProjectOverview() {
           <div style={{ marginTop: 8 }}>
             {wfSummary ? (
               <div>
-                Selected Format/Workflow: <code>{wfSummary.id}</code> — backend: {wfSummary.backend}, schema: {wfSummary.schema_id} {' '}
+                Selected Format: <code>{wfSummary.schema_id}</code> — backend: {wfSummary.backend} {' '}
                 <a href={`/projects/${data.id}/format`}>(change)</a>
               </div>
             ) : (
               <div>
-                No Active Workflow. <a href={`/projects/${data.id}/format`}>Select or create one</a>.
+                No format selected. <a href={`/projects/${data.id}/format`}>Choose a format</a>.
               </div>
             )}
           </div>

@@ -98,31 +98,59 @@ export default function FormatPage() {
     if (!jobId) return;
     let cancelled = false;
     let t: any;
+    let delay = 900;
+    const MAX_DELAY = 5000;
+    const controller = new AbortController();
+    const visible = () => typeof document !== 'undefined' ? !document.hidden : true;
     async function poll() {
-      const r = await fetch(`http://localhost:3001/jobs/${jobId}`);
-      const d = await r.json();
       if (cancelled) return;
-      if (d.status === 'done') {
-        setRunning(false);
-        setJobId(null);
-        router.push(`/projects/${id}/extract`);
-      } else if (d.status === 'failed') {
-        setRunning(false);
-        setJobId(null);
-        alert(`Extraction failed: ${d.error || 'unknown error'}`);
-      } else {
-        t = setTimeout(poll, 800);
+      try {
+        const r = await fetch(`http://localhost:3001/jobs/${jobId}`, { cache: 'no-store', signal: controller.signal });
+        const d = await r.json();
+        if (cancelled) return;
+        if (d.status === 'done') {
+          setRunning(false);
+          setJobId(null);
+          router.push(`/projects/${id}/extract`);
+          return;
+        }
+        if (d.status === 'failed') {
+          setRunning(false);
+          setJobId(null);
+          alert(`Extraction failed: ${d.error || 'unknown error'}`);
+          return;
+        }
+        delay = Math.min(Math.floor(delay * 1.7), MAX_DELAY);
+        t = setTimeout(poll, visible() ? delay : MAX_DELAY);
+      } catch (_e) {
+        delay = Math.min(Math.floor((delay || 900) * 2), MAX_DELAY);
+        if (!cancelled) t = setTimeout(poll, visible() ? delay : MAX_DELAY);
       }
     }
+    const onVisibility = () => {
+      if (visible()) {
+        delay = 700;
+        if (t) clearTimeout(t);
+        t = setTimeout(poll, 10);
+      }
+    };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
     poll();
-    return () => { cancelled = true; if (t) clearTimeout(t); };
+    return () => {
+      cancelled = true;
+      if (t) clearTimeout(t);
+      controller.abort();
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [jobId, id, router]);
+
+  const activeWf = workflows.find((w) => w.id === activeWorkflowId);
 
   return (
     <div style={{ padding: 20 }}>
       <h1>Choose Format & Backend</h1>
       <div style={{ marginBottom: 12, color: '#444' }}>
-        Active Workflow: {activeWorkflowId ? <code>{activeWorkflowId}</code> : 'None'}
+        Active Format: {activeWf?.schema?.id ? <code>{activeWf.schema.id}</code> : 'None'}
       </div>
       <div style={{ display: 'flex', gap: 24 }}>
         <div style={{ flex: 1 }}>
@@ -147,27 +175,9 @@ export default function FormatPage() {
         </div>
       </div>
       <div style={{ marginTop: 16, display: 'flex', gap: 12 }}>
-        <button disabled={!id || saving || activating} onClick={saveWorkflow}>{saving ? 'Saving...' : (workflow ? 'Save + Activate' : 'Save + Activate')}</button>
-        <button disabled={!id || running || activating || saving} onClick={runExtraction}>{running ? 'Running...' : 'Run Extraction'}</button>
+        <button disabled={!id || saving || activating} onClick={saveWorkflow}>{saving ? 'Saving…' : 'Save Format'}</button>
+        <button disabled={!id || running || activating || saving} onClick={runExtraction}>{running ? 'Running…' : 'Run Extraction'}</button>
       </div>
-      {workflows?.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <h3>Project Workflows</h3>
-          <ul>
-            {workflows.map((wf) => (
-              <li key={wf.id}>
-                <code>{wf.id}</code> — backend: {wf.backend}, schema: {wf.schema?.id}
-                {activeWorkflowId !== wf.id && (
-                  <button style={{ marginLeft: 8 }} disabled={activating} onClick={() => activateWorkflow(wf.id)}>
-                    {activating ? 'Activating…' : 'Activate'}
-                  </button>
-                )}
-                {activeWorkflowId === wf.id && <span style={{ marginLeft: 8, color: 'green' }}>(Active)</span>}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }

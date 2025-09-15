@@ -68,20 +68,48 @@ export default function IngestPage() {
   }
 
   useEffect(() => {
+    if (!jobId) return;
     let t: any;
+    let cancelled = false;
+    let delay = 900;
+    const MAX_DELAY = 5000;
+    const controller = new AbortController();
+    const visible = () => typeof document !== 'undefined' ? !document.hidden : true;
+
     async function poll() {
-      if (!jobId) return;
-      const r = await fetch(`${apiBase}/jobs/${jobId}`);
-      const d = await r.json();
-      if (d.status === 'done' || d.status === 'failed') {
-        setJobId(null);
-        refreshFiles();
-      } else {
-        t = setTimeout(poll, 750);
+      if (!jobId || cancelled) return;
+      try {
+        const r = await fetch(`${apiBase}/jobs/${jobId}`, { cache: 'no-store', signal: controller.signal });
+        const d = await r.json();
+        if (cancelled) return;
+        if (d.status === 'done' || d.status === 'failed') {
+          setJobId(null);
+          refreshFiles();
+          return;
+        }
+        delay = Math.min(Math.floor(delay * 1.7), MAX_DELAY);
+        t = setTimeout(poll, visible() ? delay : MAX_DELAY);
+      } catch (_e) {
+        delay = Math.min(Math.floor((delay || 900) * 2), MAX_DELAY);
+        if (!cancelled) t = setTimeout(poll, visible() ? delay : MAX_DELAY);
       }
     }
+
+    const onVisibility = () => {
+      if (visible()) {
+        delay = 700;
+        if (t) clearTimeout(t);
+        t = setTimeout(poll, 10);
+      }
+    };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
     poll();
-    return () => { if (t) clearTimeout(t); };
+    return () => {
+      cancelled = true;
+      if (t) clearTimeout(t);
+      controller.abort();
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [jobId]);
 
   async function refreshFiles() {

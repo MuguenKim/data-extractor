@@ -6,9 +6,8 @@ export default function Home() {
       <h1>Structured Data Extractor</h1>
       <ul>
         <li><Link href="/projects">Projects</Link></li>
-        <li><Link href="/workflows">Workflows (demo)</Link></li>
       </ul>
-      <p>Flow: Create a project → Ingest → Extract → View Results.</p>
+      <p>Flow: Create project → Ingest → Choose Format → Extract → View Results.</p>
     </main>
   );
 }

@@ -1,7 +1,16 @@
 import express from "express";
 import dotenv from "dotenv";
+import path from "path";
+import fs from "fs";
 
-dotenv.config();
+// Load env from repo root first, then allow app-local overrides
+(() => {
+  try {
+    const rootEnv = path.resolve(__dirname, '../../../.env');
+    if (fs.existsSync(rootEnv)) dotenv.config({ path: rootEnv });
+  } catch (_) { /* ignore */ }
+  dotenv.config();
+})();
 
 const app = express();
 const PORT = Number(process.env.WORKER_HTTP_PORT ?? 3002);

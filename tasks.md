@@ -12,6 +12,15 @@
   - [ ] M4. Schema Inference + Editor (Week 4)
   - [ ] M5. Public API + SDK + Deployable PoC (Week 5)
 
+## Immediate TODO (No-Workflow UI)
+
+- Replace “workflow” mentions with “format” in UI
+- Home: remove Workflows link
+- Project Overview: show Active Format summary; link to Format page
+- Format page: select/infer schema; save and set as Active Format (may use backend shim temporarily)
+- Extract page: list results and show side-by-side viewer (fields + raw text spans); Run Extraction button
+- API follow-up: add `PATCH /projects/:id/format` and switch extract to `active_schema_id`
+
 - Acceptance Tests (details below):
   - [ ] AT-01
   - [ ] AT-02
@@ -57,7 +66,7 @@ Status (updated on 2025-09-14)
 
 * `/projects` (create); `/projects/[id]` (summary)
 * `/projects/[id]/ingest` (multi-upload, progress, file table)
-* `/projects/[id]/extract` (Run Baseline Extraction for **all files**; status; uses Active Workflow when set)
+* `/projects/[id]/extract` (Run Extraction for all files using Active Format; status; inline structured data + raw text viewer)
 * `/projects/[id]/results/[fileId]` (document viewer with **highlighted spans**)
 
 **Tests**
@@ -99,7 +108,7 @@ Status (investigated on 2025-09-14)
 **Backend**
 
 * LangExtract wrapper + chunker + merge; model router (Ollama fast → Groq precision)
-* Workflow create/bind; `/extract?workflow_id=` (schema-controlled)
+* Project Active Format (no workflows): `PATCH /projects/:id/format { schema_id }`; extraction uses `active_schema_id`.
 
 **Frontend**
 
@@ -117,12 +126,11 @@ Status (investigated on 2025-09-14)
 - Backend
   - [x] LangExtract wrapper + chunker + merge (`packages/core/src/langextract/*`)
   - [x] Model router with backends: mock/groq/ollama (network backends stubbed)
-  - [x] Workflows create/bind (`POST /projects/:id/workflows`); list/activate (`GET /projects/:id/workflows`, `PATCH /projects/:id/workflows/:workflowId/activate`); global list (`GET /workflows`)
-  - [x] Extraction endpoint (`POST /projects/:id/extract?workflow_id=...`) defaults to Active Workflow when param omitted
-  - [x] Groq/Ollama calls 
+  - [ ] Project Active Format endpoint (`PATCH /projects/:id/format`) — to implement
+  - [ ] Extraction uses `active_schema_id` — to implement
 - Frontend
-  - [x] `/projects/[id]/format` implemented; `/projects/[id]` shows Selected Format when set; `/workflows` lists workflows across projects
-  - [x] Job page allows JSON download of result
+  - [x] `/projects/[id]/format` implemented (UI copy pending “Format”, no workflow mentions)
+  - [x] Job result JSON download
 - Tests
   - [x] Contract tests for spans coverage
 - DoD
@@ -208,7 +216,7 @@ Status (investigated on 2025-09-14)
 9. **Web—Results Viewer:** highlight spans; field panel with confidence & warnings
 10. **LangExtract Wrapper:** chunker (1–3k tokens), merge, spans required
 11. **Model Router:** Ollama fast pass → Groq precision escalation thresholds
-12. **Workflows CRUD + Monitor:** create/list/activate per project; global `/workflows` monitor; `/projects/:id/extract` uses Active Workflow by default
+12. **Format Selection (no workflows):** set Active Format per project; extraction uses `active_schema_id` by default
 13. **Validation Engine:** JSON-Schema + Rule DSL + re-read check
 14. **Web—Review UI:** show rules, inline edit, re-validate, status badges
 15. **Infer Schema API:** sample 2–5 files → draft JSON Schema + versioning
